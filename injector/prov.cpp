@@ -119,11 +119,12 @@ int main(int argc, char** argv) {
     std::string slurm_cluster_name = "cname1";
 
     if (*start) {
+        std::string absolute_path_start = std::filesystem::canonical(path_start);
         std::string start_json = R"({"type":"start","header":{"slurm_job_id":")"
                                  + slurm_job_id + R"(","slurm_cluster_name":")"
                                  + slurm_cluster_name
                                  + R"("},"payload":{"json":)" + json_start
-                                 + R"(,"path":")" + path_start + R"("}})";
+                                 + R"(,"path":")" + absolute_path_start + R"("}})";
         send_json(endpoint_url, start_json);
     } else if (*end) {
         std::string end_json = R"({"type":"end","header":{"slurm_job_id":")"
@@ -132,9 +133,10 @@ int main(int argc, char** argv) {
                                + json_end + "}}";
         send_json(endpoint_url, end_json);
     } else if (*exec) {
-        send_data_to_preloade(slurm_job_id, slurm_cluster_name, path_exec);
+        std::string absolute_path_exec = std::filesystem::canonical(path_exec);
+        send_data_to_preloade(slurm_job_id, slurm_cluster_name, absolute_path_exec);
         start_preload_process(injector_path, command);
-        send_injector_data(slurm_job_id, slurm_cluster_name, path_exec,
+        send_injector_data(slurm_job_id, slurm_cluster_name, absolute_path_exec,
                            json_exec, command, endpoint_url);
     }
 }
