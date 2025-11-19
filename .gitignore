@@ -2,3 +2,15 @@
 injector/prov
 injector/injector.so
 injector/build.sh
+receiver/build/
+receiver/CMakeFiles/
+receiver/CMakeCache.txt
+receiver/cmake_install.cmake
+receiver/Makefile
+receiver/.cache
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe

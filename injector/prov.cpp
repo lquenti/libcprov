@@ -40,6 +40,8 @@ void send_json(const std::string& url, const std::string& json) {
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+        +[](void*, size_t s, size_t n, void*) { return s * n; });
 
     curl_easy_perform(curl);
 
@@ -79,7 +81,8 @@ void send_injector_data(const std::string& slurm_job_id,
 
 int main(int argc, char** argv) {
     const std::string endpoint_url = "http://127.0.0.1:9000/log";
-    const std::string injector_path = "./injector.so";
+    //const std::string injector_path = std::filesystem::canonical("./injector.so");
+    const std::string injector_path = "./injector/injector.so";
 
     CLI::App app{"test"};
     auto start = app.add_subcommand("start", "start the service");
