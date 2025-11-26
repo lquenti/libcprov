@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
-./injector/prov start --path "."
-./injector/prov exec "fortune | cowsay" --path "."
-./injector/prov end
+./injector/build/prov start --path "."
+./injector/build/prov exec "fortune | cowsay" --path "."
+./injector/build/prov end

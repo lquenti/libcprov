@@ -101,8 +101,7 @@ std::vector<Event> parse_events(ondemand::object& payload) {
         switch (current_sysop) {
             case O::ProcessStart:
                 new_event.payload
-                    = ProcessStart{.pid = get_uint64(event_data, "pid"),
-                                   .ppid = get_uint64(event_data, "ppid")};
+                    = ProcessStart{.ppid = get_uint64(event_data, "ppid")};
                 break;
             case O::ProcessEnd:
                 new_event.payload = ProcessEnd{};
@@ -138,12 +137,12 @@ std::vector<Event> parse_events(ondemand::object& payload) {
                 break;
             case O::Spawn:
                 new_event.payload = SpawnCall{
-                    .child_pid = std::stol(get_string(event_data, "child_pid")),
+                    .child_pid = get_uint64(event_data, "child_pid"),
                     .target = get_string(event_data, "path")};
                 break;
             case O::Fork:
-                new_event.payload = ForkCall{.child_pid = std::stol(get_string(
-                                                 event_data, "child_pid"))};
+                new_event.payload = ForkCall{
+                    .child_pid = get_uint64(event_data, "child_pid")};
                 break;
         }
         processedEvents.push_back(new_event);
@@ -160,6 +159,7 @@ ParsedBatch parse_batch(const std::string& json_body) {
     auto hdr = env.find_field_unordered("header").get_object().value();
     std::string type = get_string(hdr, "type");
     new_batch.type = get_call_type(type);
+    new_batch.pid = get_uint64(hdr, "pid");
     new_batch.job_id = get_string(hdr, "job_id");
     new_batch.cluster_name = get_string(hdr, "cluster_name");
     auto payload = env.find_field_unordered("payload").get_object().value();

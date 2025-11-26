@@ -28,9 +28,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
-#include <iostream>
-#include <queue>
 #include <string>
 #include <vector>
 
@@ -46,10 +43,10 @@ static std::string get_env(const char* name) {
 }
 // const std::string slurm_job_id = get_env("SLURM_JOB_ID");
 // const std::string slurm_cluster_name = get_env("SLURM_CLUSTER_NAME");
-const std::string slurm_job_id = "1";
-const std::string slurm_cluster_name = "cname1";
+static const std::string slurm_job_id = "1";
+static const std::string slurm_cluster_name = "cname1";
 
-static std::string project_path;
+static std::string path_exec = get_env("PROV_PATH_EXEC");
 static std::string aggregated_events_json;
 static pthread_mutex_t events_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -102,7 +99,7 @@ static std::string fd_path(const int& fd) {
 
 static void log_input_event(const std::string operation,
                             const std::string path_in) {
-    // if (!path_in.starts_with(project_path)) return;
+    // if (!path_in.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"("})";
@@ -111,7 +108,7 @@ static void log_input_event(const std::string operation,
 
 static void log_output_event(const std::string operation,
                              const std::string path_out) {
-    // if (!path_out.starts_with(project_path)) return;
+    // if (!path_out.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path_out":")" + path_out + R"("})";
@@ -121,8 +118,8 @@ static void log_output_event(const std::string operation,
 static void log_input_output_event(const std::string operation,
                                    const std::string path_in,
                                    const std::string path_out) {
-    // if (!(path_in.starts_with(project_path)
-    //       || path_out.starts_with(project_path)))
+    // if (!(path_in.starts_with(path_exec)
+    //       || path_out.starts_with(path_exec)))
     //     return;
 
     std::string ts = now_ns();
@@ -133,7 +130,7 @@ static void log_input_output_event(const std::string operation,
 
 static void log_input_event_fd(const std::string operation, int path_in_fd) {
     std::string path_in = fd_path(path_in_fd);
-    // if (!path_in.starts_with(project_path)) return;
+    // if (!path_in.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"("})";
@@ -142,7 +139,7 @@ static void log_input_event_fd(const std::string operation, int path_in_fd) {
 
 static void log_output_event_fd(const std::string operation, int path_out_fd) {
     std::string path_out = fd_path(path_out_fd);
-    // if (!path_out.starts_with(project_path)) return;
+    // if (!path_out.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path_out":")" + path_out + R"("})";
@@ -154,8 +151,8 @@ static void log_input_output_event_fd(const std::string operation,
     std::string path_in = fd_path(path_in_fd);
     std::string path_out = fd_path(path_out_fd);
 
-    // if (!(path_in.starts_with(project_path)
-    //       || path_out.starts_with(project_path)))
+    // if (!(path_in.starts_with(path_exec)
+    //       || path_out.starts_with(path_exec)))
     //     return;
 
     std::string ts = now_ns();
@@ -172,7 +169,7 @@ static void log_fork_event(const std::string operation, pid_t child_pid) {
 
 static void log_spawn_event(const std::string operation, pid_t child_pid,
                             const std::string target) {
-    // if (!target.starts_with(project_path)) return;
+    // if (!target.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"child_pid":)" + std::to_string(child_pid)
@@ -182,7 +179,7 @@ static void log_spawn_event(const std::string operation, pid_t child_pid,
 
 static void log_exec_event(const std::string operation,
                            const std::string target) {
-    // if (!target.starts_with(project_path)) return;
+    // if (!target.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target + R"("})";
@@ -191,7 +188,7 @@ static void log_exec_event(const std::string operation,
 
 static void log_exec_fd_event(const std::string operation, int path_target_fd) {
     std::string target_string = fd_path(path_target_fd);
-    // if (!target_string.starts_with(project_path)) return;
+    // if (!target_string.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target_string + R"("})";
@@ -200,7 +197,7 @@ static void log_exec_fd_event(const std::string operation, int path_target_fd) {
 
 static void log_exec_fail_event(const std::string operation,
                                 const std::string target, int err) {
-    // if (!target.starts_with(project_path)) return;
+    // if (!target.starts_with(path_exec)) return;
 
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target + R"(","error":)"
@@ -263,28 +260,12 @@ static void log_process_end() {
     add_event(operation, ts, json);
 }
 
-static void read_in_path_clean() {
-    const std::string input_path
-        = "/dev/shm/" + slurm_job_id + slurm_cluster_name + "_input";
-    int fd = syscall(SYS_open, input_path.c_str(), O_RDONLY);
-    if (fd >= 0) {
-        char buf[1024] = {0};
-        ssize_t n = syscall(SYS_read, fd, buf, sizeof(buf) - 1);
-        if (n > 0) {
-            project_path.assign(buf, n);
-            if (!project_path.empty() && project_path.back() == '\n')
-                project_path.pop_back();
-        }
-        syscall(SYS_close, fd);
-    }
-}
-
 static void save_events_clean() {
     if (aggregated_events_json.empty()) return;
-    const std::string path
-        = "/dev/shm/" + slurm_job_id + slurm_cluster_name + "_output.jsonl";
-    int fd
-        = syscall(SYS_open, path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    std::string path_write = get_env("PROV_PATH_WRITE") + "/"
+                             + std::to_string(getpid()) + ".jsonl";
+    int fd = syscall(SYS_open, path_write.c_str(),
+                     O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd >= 0) {
         syscall(SYS_write, fd, aggregated_events_json.data(),
                 aggregated_events_json.size());
@@ -293,7 +274,6 @@ static void save_events_clean() {
 }
 
 __attribute__((constructor)) static void preload_init(void) {
-    read_in_path_clean();
     log_process_start();
 }
 

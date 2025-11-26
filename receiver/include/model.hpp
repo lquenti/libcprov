@@ -66,15 +66,14 @@ struct ExecCall {
     bool failed = false;
 };
 struct SpawnCall {
-    long child_pid = -1;
+    uint64_t child_pid = -1;
     std::string target;
 };
 struct ForkCall {
-    long child_pid = -1;
+    uint64_t child_pid = -1;
 };
 
 struct ProcessStart {
-    uint64_t pid = 0;
     uint64_t ppid = 0;
     std::string step_id;
     std::string step_name;
@@ -95,6 +94,7 @@ enum class CallType { Start, End, Exec };
 
 struct ParsedBatch {
     CallType type;
+    uint64_t pid;
     std::string job_id;
     std::string cluster_name;
     std::string path;
