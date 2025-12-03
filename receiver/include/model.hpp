@@ -131,10 +131,29 @@ struct ParsedRequestQueue {
     }
 };
 
-struct ProvData {
-    std::unordered_set<std::string> reads;
-    std::unordered_set<std::string> writes;
-    std::unordered_set<std::string> executes;
+struct ProcessProvOperation {
+    uint64_t ts;
+    std::string path;
+};
+struct ProcessProvNamebind {
+    uint64_t ts;
+    std::string path_source;
+    std::string path_target;
+};
+struct ProcessProvExec {
+    uint64_t ts;
+    uint64_t child_pid;
+    std::string target_path;
+    // bool failed = false;
+};
+struct ProcessProvOperations {
+    std::vector<ProcessProvOperation> reads;
+    std::vector<ProcessProvOperation> writes;
+    std::vector<ProcessProvExec> executes;
+    std::vector<ProcessProvNamebind> renames;
+    std::vector<ProcessProvNamebind> link;
+    std::vector<ProcessProvNamebind> symlink;
+    std::vector<ProcessProvOperation> deletes;
 };
 
 struct ProcessProvData {
@@ -142,7 +161,14 @@ struct ProcessProvData {
     uint64_t ppid;
     uint64_t start_time;
     uint64_t end_time;
-    // ProvData prov_data;
+    std::unordered_map<std::string, std::string> symlink_map;
+    ProcessProvOperations prov_operations;
+};
+
+struct ExecProvOperations {
+    std::unordered_set<std::string> reads;
+    std::unordered_set<std::string> writes;
+    std::unordered_set<std::string> executes;
 };
 
 struct ExecProvData {
@@ -151,7 +177,7 @@ struct ExecProvData {
     uint64_t end_time;
     std::unordered_map<std::string, std::string> rename_map;
     std::unordered_map<std::string, std::string> symlink_map;
-    ProvData prov_data;
+    ExecProvOperations prov_operations;
     std::unordered_map<uint64_t, ProcessProvData> process_map;
 };
 
@@ -164,7 +190,5 @@ struct ProcessedJobData {
     std::string path;
     uint64_t start_time;
     uint64_t end_time;
-    // ProvData global_prov_data;
-    // std::unordered_map<std::string, std::string> global_rename_map;
     std::queue<ExecProvData> exec_prov_data_queue;
 };
