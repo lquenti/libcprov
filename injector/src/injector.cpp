@@ -28,6 +28,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -47,8 +49,9 @@ static const std::string slurm_job_id = "1";
 static const std::string slurm_cluster_name = "cname1";
 
 static std::string path_exec = get_env("PROV_PATH_EXEC");
-static std::string aggregated_events_json;
-static pthread_mutex_t events_mutex = PTHREAD_MUTEX_INITIALIZER;
+// static std::ostringstream aggregated_events_json;
+static std::vector<std::string> aggregated_events;
+static std::mutex events_mutex;
 
 static std::string now_ns() {
     using namespace std::chrono;
@@ -75,11 +78,11 @@ static char** build_argv_from_varargs(const char* first, va_list ap) {
 static inline void add_event(const std::string& operation,
                              const std::string& ts,
                              const std::string& event_json) {
-    pthread_mutex_lock(&events_mutex);
-    aggregated_events_json += R"({"event_header":{"operation":")" + operation
-                              + R"(","ts":)" + ts + R"(},"event_data":)"
-                              + event_json + "}\n";
-    pthread_mutex_unlock(&events_mutex);
+    std::lock_guard<std::mutex> guard(events_mutex);
+    std::string event = R"({"event_header":{"operation":")" + operation
+                        + R"(","ts":)" + ts + R"(},"event_data":)" + event_json
+                        + "}\n";
+    aggregated_events.push_back(event);
 }
 
 static std::string fd_path(const int& fd) {
@@ -261,14 +264,21 @@ static void log_process_end() {
 }
 
 static void save_events_clean() {
-    if (aggregated_events_json.empty()) return;
+    std::string all_events;
+    size_t total_size = 0;
+    for (const auto& event : aggregated_events) {
+        total_size += event.size();
+    }
+    all_events.reserve(total_size);
+    for (const auto& event : aggregated_events) {
+        all_events.append(event.data(), event.size());
+    }
     std::string path_write = get_env("PROV_PATH_WRITE") + "/"
                              + std::to_string(getpid()) + ".jsonl";
     int fd = syscall(SYS_open, path_write.c_str(),
                      O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd >= 0) {
-        syscall(SYS_write, fd, aggregated_events_json.data(),
-                aggregated_events_json.size());
+        syscall(SYS_write, fd, all_events.data(), all_events.size());
         syscall(SYS_close, fd);
     }
 }
