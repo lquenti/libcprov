@@ -87,13 +87,10 @@ SysOp sysop_from(std::string_view t) {
     if (one_of(t, "FORK", "VFORK", "CLONE")) return O::Fork;
     if (one_of(t, "PROCESS_START")) return O::ProcessStart;
     if (one_of(t, "PROCESS_END")) return O::ProcessEnd;
-    // if (one_of(t, "JOB_START")) return O::JobStart;
-    // if (one_of(t, "JOB_END")) return O::JobEnd;
     return O::Unknown;
 }
 
-std::optional<Event> parse_event_object(ondemand::object event_obj,
-                                        uint64_t& pid) {
+Event parse_event_object(ondemand::object event_obj, uint64_t& pid) {
     auto hdr_res = event_obj.find_field_unordered("event_header").get_object();
     auto hdr = hdr_res.value();
     uint64_t ts = get_uint64(hdr, "ts");
@@ -104,9 +101,7 @@ std::optional<Event> parse_event_object(ondemand::object event_obj,
     Event new_event;
     new_event.ts = ts;
     new_event.operation = sysop_from(op);
-    if (pid != 0) {
-        new_event.pid = pid;
-    }
+    new_event.pid = pid;
     using O = SysOp;
     switch (new_event.operation) {
         case O::ProcessStart:
@@ -170,7 +165,7 @@ std::vector<Event> parse_jsonl_file(const std::string& path,
     for (auto doc : *stream_res) {
         auto obj_res = doc.get_object();
         auto ev_opt = parse_event_object(obj_res.value(), current_pid);
-        events.push_back(std::move(*ev_opt));
+        events.push_back(std::move(ev_opt));
     }
     return events;
 }

@@ -12,13 +12,13 @@ struct DBProcessEvents {
 
 class EventRecorder {
    public:
-    void set_current_pid(uint64_t pid);
+    void set_current_pid(const uint64_t& pid);
     void set_current_operation(const std::string& operation);
 
     void log_read(const std::string& path);
     void log_write(const std::string& path);
-    void log_exec(const std::string& path, uint64_t ppid);
-
+    void log_exec(const std::string& path, const uint64_t& ppid);
+    void log_process_start();
     void rename(const std::string& original_path, const std::string& new_path);
     void link(const std::string& original_path, const std::string& new_path);
     void delete_path(const std::string& path);

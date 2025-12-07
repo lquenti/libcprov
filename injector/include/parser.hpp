@@ -2,7 +2,6 @@
 #include <simdjson.h>
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,8 +15,7 @@ inline bool one_of(std::string_view t, std::string_view a);
 template <class... Ss>
 inline bool one_of(std::string_view t, std::string_view a, Ss... s);
 SysOp sysop_from(std::string_view t);
-std::optional<Event> parse_event_object(simdjson::ondemand::object event_obj,
-                                        uint64_t& pid);
+Event parse_event_object(simdjson::ondemand::object event_obj, uint64_t& pid);
 std::vector<Event> parse_jsonl_file(const std::string& path,
                                     simdjson::ondemand::parser& parser);
 std::vector<Event> parse_all_jsonl_files(const std::string& path_access);

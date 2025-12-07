@@ -7,7 +7,7 @@
 
 #include "model.hpp"
 
-void EventRecorder::set_current_pid(uint64_t pid) {
+void EventRecorder::set_current_pid(const uint64_t& pid) {
     current_pid_ = pid;
 }
 
@@ -37,16 +37,21 @@ void EventRecorder::log_write(const std::string& path) {
     }
 }
 
-void EventRecorder::log_exec(const std::string& path, uint64_t ppid) {
+void EventRecorder::log_exec(const std::string& path, const uint64_t& pid) {
     const std::string resolved = resolve_path(path);
     goedl_operations_.goedl_operation_map[resolved].execute = true;
     auto& table = all_process_events_map_[current_pid_].operation_map[path];
     if (!table.execute) {
         table.execute = true;
-        std::string payload = R"("path_out":")" + path + R"(","ppid":)"
-                              + std::to_string(ppid) + R"(})";
+        std::string payload = R"("path_exec":")" + path + R"(","child_pid":)"
+                              + std::to_string(pid) + R"(})";
         add_current_process(payload);
     }
+}
+
+void EventRecorder::log_process_start() {
+    std::string payload = R"(})";
+    add_current_process(payload);
 }
 
 void EventRecorder::rename(const std::string& original_path,

@@ -112,24 +112,23 @@ std::string build_end_json_output(const std::string& slurm_job_id,
            + R"("},"payload":{"json":)" + json_end_extra + "}}";
 }
 
-/*std::string build_exec_json_output(const std::string& slurm_job_id,
+std::string build_exec_json_output(const std::string& slurm_job_id,
                                    const std::string& slurm_cluster_name,
                                    const std::string& path_exec,
                                    const std::string& json_exec,
                                    const std::string& cmd,
-                                   const std::vector<Event>& events) {
-    std::string json_object;
+                                   const std::vector<std::string>& events) {
     std::ostringstream event_array;
     event_array << "[";
     bool first = true;
-    for (const Event& event : events) {
+    for (const std::string& event : events) {
         if (!first) event_array << ",";
-        std::string json_with_pid = event.json;
+        /*std::string json_with_pid = event.json;
         size_t header_start = json_with_pid.find(R"("event_header":{)");
         size_t insert_pos = header_start + strlen("\"event_header\":{");
         std::string pid_field = R"("pid":)" + std::to_string(event.pid) + ",";
-        json_with_pid.insert(insert_pos, pid_field);
-        event_array << json_with_pid;
+        json_with_pid.insert(insert_pos, pid_field);*/
+        event_array << event;
         first = false;
     }
     event_array << "]";
@@ -141,7 +140,7 @@ std::string build_end_json_output(const std::string& slurm_job_id,
                               + R"(,"json":)" + json_exec + R"(,"path":")"
                               + path_exec + R"(","command":")" + cmd + R"("}})";
     return json_string;
-}*/
+}
 
 enum class Mode { Start, End, Exec };
 
@@ -231,15 +230,23 @@ int main(int argc, char** argv) {
             break;
         }
         case Mode::Exec: {
+            std::string exec_path = parsed.exec_opts.path;
+            std::string exec_json_input = parsed.exec_opts.json;
+            std::string exec_command = parsed.exec_opts.command;
             std::string absolute_path_exec
-                = std::filesystem::canonical(parsed.exec_opts.path).string();
+                = std::filesystem::canonical(exec_path).string();
             std::string path_access
                 = "/dev/shm/prov_" + std::to_string(getpid());
             set_env_variables(absolute_path_exec, path_access);
             std::string injector_path = "./injector/build/libinjector.so";
-            start_preload_process(injector_path, parsed.exec_opts.command,
-                                  path_access);
-            extract_injector_data(path_access);
+            start_preload_process(injector_path, exec_command, path_access);
+            ProcessedInjectorData processed_injector_data
+                = extract_injector_data(path_access);
+            std::string exec_json_output = build_exec_json_output(
+                slurm_job_id, slurm_cluster_name, absolute_path_exec,
+                exec_json_input, exec_command,
+                processed_injector_data.process_json_operation_objects);
+            send_json(endpoint_url, exec_json_output);
             break;
         }
     }

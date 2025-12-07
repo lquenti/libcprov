@@ -4,13 +4,13 @@
 #include <deque>
 #include <string>
 #include <utility>
-#include <variant>
 
 #include "event_recorder.hpp"
 #include "model.hpp"
 
 ProcessedInjectorData process_events(std::deque<Event>& events) {
     EventRecorder event_recorder;
+    bool first_event = true;
     while (!events.empty()) {
         Event event = std::move(events.front());
         events.pop_front();
@@ -21,10 +21,11 @@ ProcessedInjectorData process_events(std::deque<Event>& events) {
         event_recorder.set_current_pid(pid);
         switch (op) {
             case SysOp::ProcessStart: {
-                const auto& process_start_event
-                    = std::get<ProcessStart>(payload);
-                event_recorder.set_current_operation("PROCESS_START");
-                event_recorder.log_exec("", process_start_event.ppid);
+                if (first_event) {
+                    event_recorder.set_current_operation("PROCESS_START");
+                    event_recorder.log_process_start();
+                    first_event = false;
+                }
                 break;
             }
             case SysOp::ProcessEnd: {
@@ -93,14 +94,14 @@ ProcessedInjectorData process_events(std::deque<Event>& events) {
             }
             case SysOp::Spawn: {
                 const auto& spawn_event = std::get<SpawnCall>(payload);
-                event_recorder.set_current_operation("SPAWN");
+                event_recorder.set_current_operation("EXEC");
                 event_recorder.log_exec(spawn_event.target,
                                         spawn_event.child_pid);
                 break;
             }
             case SysOp::Fork: {
                 const auto& fork_event = std::get<ForkCall>(payload);
-                event_recorder.set_current_operation("FORK");
+                event_recorder.set_current_operation("EXEC");
                 event_recorder.log_exec("", fork_event.child_pid);
                 break;
             }

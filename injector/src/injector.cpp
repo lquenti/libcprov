@@ -250,7 +250,7 @@ static void log_process_start() {
     pid_t pid = getpid();
     pid_t ppid = getppid();
     std::string ts = now_ns();
-    std::string operation = "START_PROCESS";
+    std::string operation = "PROCESS_START";
     std::string json = R"({"pid":)" + std::to_string(pid) + R"(,"ppid":)"
                        + std::to_string(ppid) + R"(})";
     add_event(operation, ts, json);
@@ -258,7 +258,7 @@ static void log_process_start() {
 
 static void log_process_end() {
     std::string ts = now_ns();
-    std::string operation = "END_PROCESS";
+    std::string operation = "PROCESS_END";
     std::string json = "{}";
     add_event(operation, ts, json);
 }
