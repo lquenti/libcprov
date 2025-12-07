@@ -34,6 +34,7 @@ class EventRecorder {
     uint64_t current_pid_ = 0;
     std::string current_operation_;
     DBProcessEvents current_process_events_;
+    int current_order_number_ = 0;
 
     std::string resolve_path(const std::string& path) const;
     void add_current_process(const std::string& event_data_payload);

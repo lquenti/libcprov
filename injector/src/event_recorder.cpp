@@ -108,8 +108,11 @@ std::string EventRecorder::resolve_path(const std::string& path) const {
 
 void EventRecorder::add_current_process(const std::string& event_data_payload) {
     std::string obj = R"({"operation":")" + current_operation_ + R"(","pid":)"
-                      + std::to_string(current_pid_) + R"(,"event_data":)"
-                      + R"({)" + event_data_payload + R"(}})";
+                      + std::to_string(current_pid_) + R"(,"order_number":)"
+                      + std::to_string(current_order_number_)
+                      + R"(,"event_data":)" + R"({)" + event_data_payload
+                      + R"(}})";
+    current_order_number_++;
     process_json_operation_objects_.push_back(std::move(obj));
 }
 
