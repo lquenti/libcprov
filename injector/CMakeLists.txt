@@ -9,15 +9,20 @@ find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SIMDJSON REQUIRED simdjson)
 
+set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # -------- Prov Executable --------
 add_executable(prov
     src/prov.cpp
+    src/event_recorder.cpp
+    src/parser.cpp
+    src/processor.cpp
 )
 
 target_include_directories(prov PRIVATE
+    ${PROJECT_INCLUDE_DIR}
     ${SIMDJSON_INCLUDE_DIRS}
     /usr/include
-)
+  )
 
 target_link_libraries(prov PRIVATE
     CURL::libcurl

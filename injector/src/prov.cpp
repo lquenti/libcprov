@@ -4,19 +4,15 @@
 #include <unistd.h>
 
 #include <CLI/CLI.hpp>
-#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <string>
 
-using namespace simdjson;
+#include "model.hpp"
+#include "parser.hpp"
+#include "processor.hpp"
 
-struct Event {
-    uint64_t ts;
-    uint64_t pid;
-    std::string json;
-};
+using namespace simdjson;
 
 void set_env_variables(const std::string& path_exec,
                        const std::string& path_access) {
@@ -39,7 +35,7 @@ void start_preload_process(const std::string& so_path, const std::string& cmd,
     }
 }
 
-std::vector<Event> parse_injector_data(const std::string& path_access) {
+/*std::vector<Event> parse_injector_data(const std::string& path_access) {
     std::vector<Event> events;
     std::vector<std::string> filenames;
     ondemand::parser parser;
@@ -62,6 +58,19 @@ std::vector<Event> parse_injector_data(const std::string& path_access) {
     std::sort(events.begin(), events.end(),
               [](const Event& a, const Event& b) { return a.ts < b.ts; });
     return events;
+}*/
+
+ProcessedInjectorData extract_injector_data(const std::string& path_access) {
+    std::vector<Event> events = parse_all_jsonl_files(path_access);
+    std::filesystem::remove_all(path_access);
+    std::sort(events.begin(), events.end(),
+              [](const Event& a, const Event& b) { return a.ts < b.ts; });
+    std::deque<Event> events_queue;
+    std::ranges::move(events, std::back_inserter(events_queue));
+    events.clear();
+    ProcessedInjectorData processed_injector_data
+        = process_events(events_queue);
+    return processed_injector_data;
 }
 
 void send_json(const std::string& url, const std::string& json) {
@@ -103,7 +112,7 @@ std::string build_end_json_output(const std::string& slurm_job_id,
            + R"("},"payload":{"json":)" + json_end_extra + "}}";
 }
 
-std::string build_exec_json_output(const std::string& slurm_job_id,
+/*std::string build_exec_json_output(const std::string& slurm_job_id,
                                    const std::string& slurm_cluster_name,
                                    const std::string& path_exec,
                                    const std::string& json_exec,
@@ -132,70 +141,107 @@ std::string build_exec_json_output(const std::string& slurm_job_id,
                               + R"(,"json":)" + json_exec + R"(,"path":")"
                               + path_exec + R"(","command":")" + cmd + R"("}})";
     return json_string;
+}*/
+
+enum class Mode { Start, End, Exec };
+
+struct StartOpts {
+    bool mpi = false;
+    std::string path;
+    std::string json = "{}";
+};
+struct EndOpts {
+    bool mpi = false;
+    std::string json = "{}";
+};
+struct ExecOpts {
+    std::string command;
+    std::string path;
+    std::string json = "{}";
+};
+
+struct Parsed {
+    Mode mode;
+    StartOpts start_opts;
+    EndOpts end_opts;
+    ExecOpts exec_opts;
+};
+
+Parsed parse_cli(int argc, char** argv) {
+    CLI::App app{"test"};
+
+    auto start = app.add_subcommand("start", "start the service");
+    StartOpts start_opts;
+    start_opts.path = std::filesystem::current_path().string();
+    start->add_flag("--mpi", start_opts.mpi, "Enable MPI mode");
+    start->add_option("--path", start_opts.path, "Specify path");
+    start->add_option("--json", start_opts.json,
+                      "Provide optional extra metadata");
+
+    auto end = app.add_subcommand("end", "Stop service");
+    EndOpts end_opts;
+    end->add_option("--json", end_opts.json, "Provide optional extra metadata");
+    end->add_flag("--mpi", end_opts.mpi, "Enable MPI mode");
+
+    auto exec = app.add_subcommand("exec", "Execute command");
+    ExecOpts exec_opts;
+    exec_opts.path = std::filesystem::current_path().string();
+    exec->add_option("command", exec_opts.command, "Specify Slurm command")
+        ->required();
+    exec->add_option("--path", exec_opts.path, "Specify path")->required();
+    exec->add_option("--json", exec_opts.json,
+                     "Provide optional extra metadata");
+
+    app.require_subcommand();
+    app.parse(argc, argv);
+    Parsed parsed{};
+    if (*start) {
+        parsed.mode = Mode::Start;
+        parsed.start_opts = std::move(start_opts);
+    } else if (*end) {
+        parsed.mode = Mode::End;
+        parsed.end_opts = std::move(end_opts);
+    } else {
+        parsed.mode = Mode::Exec;
+        parsed.exec_opts = std::move(exec_opts);
+    }
+    return parsed;
 }
 
 int main(int argc, char** argv) {
     const std::string endpoint_url = "http://127.0.0.1:9000/log";
-    // const std::string injector_path =
-    // std::filesystem::canonical("./injector.so");
-    CLI::App app{"test"};
-    auto start = app.add_subcommand("start", "start the service");
-    bool mpi_start = false;
-    std::string path_start = std::filesystem::current_path();
-    std::string json_start_extra = "{}";
-    start->add_flag("--mpi", mpi_start, "Enable MPI mode");
-    start->add_option("--path", path_start, "Scefify path");
-    start->add_option("--json", json_start_extra,
-                      "Provide optional extra metadata");
-    auto end = app.add_subcommand("end", "Stop service");
-    std::string json_end_extra = "{}";
-    end->add_option("--json", json_end_extra,
-                    "Provide optional extra metadata");
-    bool mpi_end = false;
-    end->add_flag("--mpi", mpi_end, "Enable MPI mode");
-    auto exec = app.add_subcommand("exec", "Execute command");
-    std::string command = "";
-    std::string path_exec = std::filesystem::current_path();
-    std::string json_exec_extra = "{}";
-    exec->add_option("command", command, "Specify Slurm command")->required();
-    exec->add_option("--path", path_exec, "Spefify path")->required();
-    exec->add_option("--json", json_exec_extra,
-                     "Provide optional extra metadata");
-    app.require_subcommand();
-    CLI11_PARSE(app, argc, argv);
-
-    const char* jid = std::getenv("SLURM_JOB_ID");
-    const char* cname = std::getenv("SLURM_CLUSTER_NAME");
-    /*
-    if (!jid || !cname) {
-        std::cerr << "Warning: SLURM_JOB_ID or SLURM_CLUSTER_NAME not set. "
-                     "Exiting.\n";
-        return 1;
+    Parsed parsed = parse_cli(argc, argv);
+    std::string slurm_job_id
+        = std::getenv("SLURM_JOB_ID") ? std::getenv("SLURM_JOB_ID") : "1";
+    std::string slurm_cluster_name = std::getenv("SLURM_CLUSTER_NAME")
+                                         ? std::getenv("SLURM_CLUSTER_NAME")
+                                         : "cname1";
+    switch (parsed.mode) {
+        case Mode::Start: {
+            std::string start_json = build_start_json_output(
+                parsed.start_opts.path, slurm_job_id, slurm_cluster_name,
+                parsed.start_opts.json);
+            send_json(endpoint_url, start_json);
+            break;
+        }
+        case Mode::End: {
+            std::string end_json = build_end_json_output(
+                slurm_job_id, slurm_cluster_name, parsed.end_opts.json);
+            send_json(endpoint_url, end_json);
+            break;
+        }
+        case Mode::Exec: {
+            std::string absolute_path_exec
+                = std::filesystem::canonical(parsed.exec_opts.path).string();
+            std::string path_access
+                = "/dev/shm/prov_" + std::to_string(getpid());
+            set_env_variables(absolute_path_exec, path_access);
+            std::string injector_path = "./injector/build/libinjector.so";
+            start_preload_process(injector_path, parsed.exec_opts.command,
+                                  path_access);
+            extract_injector_data(path_access);
+            break;
+        }
     }
-    std::string slurm_job_id = jid;
-    std::string slurm_cluster_name = cname;*/
-
-    std::string slurm_job_id = "1";
-    std::string slurm_cluster_name = "cname1";
-
-    if (*start) {
-        std::string start_json_output = build_start_json_output(
-            path_start, slurm_job_id, slurm_cluster_name, json_start_extra);
-        send_json(endpoint_url, start_json_output);
-    } else if (*end) {
-        std::string end_json_output = build_end_json_output(
-            slurm_job_id, slurm_cluster_name, json_end_extra);
-        send_json(endpoint_url, end_json_output);
-    } else if (*exec) {
-        std::string absolute_path_exec = std::filesystem::canonical(path_exec);
-        std::string path_access = "/dev/shm/prov_" + std::to_string(getpid());
-        set_env_variables(absolute_path_exec, path_access);
-        std::string injector_path = "./injector/build/libinjector.so";
-        start_preload_process(injector_path, command, path_access);
-        std::vector<Event> events = parse_injector_data(path_access);
-        std::string exec_json_output = build_exec_json_output(
-            slurm_job_id, slurm_cluster_name, absolute_path_exec,
-            json_exec_extra, command, events);
-        send_json(endpoint_url, exec_json_output);
-    }
+    return 0;
 }

@@ -168,12 +168,12 @@ ParsedRequest parse_request(const std::string& json_body) {
     auto doc = parser.iterate(p);
     auto env = doc.get_object().value();
     auto hdr = env.find_field_unordered("header").get_object().value();
-    std::string type = get_string(hdr, "type");
-    new_request.type = get_call_type(type);
-    new_request.job_id = get_string(hdr, "slurm_job_id");
-    new_request.cluster_name = get_string(hdr, "slurm_cluster_name");
+    // std::string type = get_string(hdr, "type");
+    // new_request.type = get_call_type(type);
+    // new_request.job_id = get_string(hdr, "slurm_job_id");
+    // new_request.cluster_name = get_string(hdr, "slurm_cluster_name");
     auto payload = env.find_field_unordered("payload").get_object().value();
-    new_request.path = get_string(payload, "path");
+    // new_request.path = get_string(payload, "path");
     if (new_request.type == CallType::Exec) {
         new_request.request_payload = Exec{0, 0, parse_events(payload)};
     }

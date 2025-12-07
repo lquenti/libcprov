@@ -23,8 +23,6 @@ FetchContent_MakeAvailable(httplib)
 add_executable(libcprov_receiver
     src/main.cpp
     src/logserver.cpp
-    src/parser.cpp
-    src/processor.cpp
 )
 
 target_include_directories(libcprov_receiver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

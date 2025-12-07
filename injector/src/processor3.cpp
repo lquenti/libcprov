@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <iostream>
 #include <model.hpp>
 #include <string>
@@ -5,105 +6,6 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
-
-// tmp debug output
-
-void print_process_operations(const ProcessProvOperations& ops) {
-    auto print_vec = [](const auto& vec, const std::string& name) {
-        using Elem = typename std::decay_t<decltype(vec)>::value_type;
-        if (vec.empty()) return;
-
-        std::cout << name << ":\n";
-        for (const auto& op : vec) {
-            if constexpr (std::is_same_v<Elem, ProcessProvOperation>) {
-                std::cout << "  ts=" << op.ts << ", path=" << op.path << "\n";
-            } else if constexpr (std::is_same_v<Elem, ProcessProvExec>) {
-                std::cout << "  ts=" << op.ts << ", child_pid=" << op.child_pid
-                          << ", target_path=" << op.target_path << "\n";
-            } else if constexpr (std::is_same_v<Elem, ProcessProvNamebind>) {
-                std::cout << "  ts=" << op.ts << ", source=" << op.path_source
-                          << ", target=" << op.path_target << "\n";
-            }
-        }
-    };
-
-    print_vec(ops.reads, "Reads");
-    print_vec(ops.writes, "Writes");
-    print_vec(ops.executes, "Executes");
-    print_vec(ops.renames, "Renames");
-    print_vec(ops.link, "Links");
-    print_vec(ops.symlink, "Symlinks");
-    print_vec(ops.deletes, "Deletes");
-}
-
-void print_process_data(const ExecProvData& exec) {
-    for (const auto& [pid, proc_data] : exec.process_map) {
-        std::cout << "Process PID: " << pid << ", PPID: " << proc_data.ppid
-                  << ", Start: " << proc_data.start_time
-                  << ", End: " << proc_data.end_time << "\n";
-        print_process_operations(proc_data.prov_operations);
-        std::cout << "-------------------------------------" << std::endl;
-    }
-}
-
-void print_set(const std::unordered_set<std::string>& s,
-               const std::string& name) {
-    std::cout << name << ": { ";
-    for (const auto& item : s) {
-        std::cout << item << " ";
-    }
-    std::cout << "}" << std::endl;
-}
-
-void print_exec_data(const ExecProvData& exec) {
-    std::cout << "Exec Step Name: " << exec.step_name << "\n"
-              << "Start Time: " << exec.start_time << "\n"
-              << "End Time: " << exec.end_time << "\n";
-
-    print_set(exec.prov_operations.reads, "Exec Reads");
-    print_set(exec.prov_operations.writes, "Exec Writes");
-    print_set(exec.prov_operations.executes, "Exec Executes");
-
-    if (!exec.rename_map.empty()) {
-        std::cout << "Rename Map: { ";
-        for (const auto& [k, v] : exec.rename_map) {
-            std::cout << k << "->" << v << " ";
-        }
-        std::cout << "}" << std::endl;
-    }
-
-    if (!exec.symlink_map.empty()) {
-        std::cout << "Symlink Map: { ";
-        for (const auto& [k, v] : exec.symlink_map) {
-            std::cout << k << "->" << v << " ";
-        }
-        std::cout << "}" << std::endl;
-    }
-
-    std::cout << "---- Process-Level Provenance ----" << std::endl;
-    print_process_data(exec);
-    std::cout << "-------------------------------------" << std::endl;
-}
-
-void print_full_job_data(const ProcessedJobData& job) {
-    std::cout << "=== Job ID: " << job.job_id
-              << ", Cluster: " << job.cluster_name
-              << ", Job Name: " << job.job_name << " ===\n"
-              << "Path: " << job.path << "\n"
-              << "Start Time: " << job.start_time
-              << ", End Time: " << job.end_time << "\n"
-              << "-------------------------------------\n";
-
-    std::queue<ExecProvData> exec_queue_copy = job.exec_prov_data_queue;
-    while (!exec_queue_copy.empty()) {
-        const ExecProvData& exec = exec_queue_copy.front();
-        print_exec_data(exec);
-        exec_queue_copy.pop();
-    }
-
-    std::cout << "=== End of Job " << job.job_id << " ===\n\n";
-}
-//
 
 struct RecordParameters {
     std::unordered_map<std::string, std::string>& exec_rename_map;
@@ -251,22 +153,115 @@ std::pair<std::string, std::string> case_link_body(
     return std::make_pair(path_out, path_in);
 }
 
-void process_exec(const Exec& exec, ProcessedJobData& processed_job_data) {
-    ExecProvData current_exec_prov_data;
-    ExecProvOperations& exec_prov_operations
-        = current_exec_prov_data.prov_operations;
-    std::unordered_map<std::string, std::string>& exec_rename_map
-        = current_exec_prov_data.rename_map;
-    std::unordered_map<std::string, std::string>& exec_symlink_map
-        = current_exec_prov_data.symlink_map;
-    std::queue<Event> events = exec.events;
-    ProcessProvOperations empty_process_prov_operations;
-    while (!events.empty()) {
-        const Event& event = events.front();
+struct OperationTable {
+    bool read;
+    bool write;
+    bool execute;
+};
+
+struct DBProcessEvents {
+    std::unordered_map<std::string, OperationTable> operation_map;
+};
+/*
+struct AllDBProcessEvents {
+    std::unordered_map<uint64_t, DBProcessEvents> process_events_map;
+};
+
+struct GoedlEvents {
+    std::unordered_map<std::string, OperationTable> operation_map;
+};
+*/
+
+struct EventRecorder {
+    std::unordered_map<std::string, std::string> goedl_rename_map;
+    std::unordered_map<std::string, OperationTable> goedl_events_operation_map;
+    std::unordered_map<uint64_t, DBProcessEvents> all_process_events_map;
+    std::vector<std::string> process_json_operation_objects;
+    uint64_t current_pid;
+    std::string current_operation;
+    DBProcessEvents current_process_events;
+    std::string resolve_path(const std::string& path) {
+        auto it = this->goedl_rename_map.find(path);
+        if (it != this->goedl_rename_map.end()) {
+            return it->second;
+        }
+        return path;
+    }
+    void add_current_process(const std::string& current_db_payload) {
+        std::string current_header = R"({"operation":")"
+                                     + this->current_operation + R"(","pid":)"
+                                     + this->current_pid + R"(,)";
+        this->process_json_operation_objects.push_back(current_header
+                                                       + current_db_payload);
+    }
+    void log_read(const std::string& path) {
+        std::string resolved_path = resolve_path(path);
+        goedl_events_operation_map[resolved_path].read = true;
+        auto& table
+            = this->all_process_events_map[current_pid].operation_map[path];
+        if (!table.read) {
+            table.read = true;
+            std::string current_db_payload
+                = R"("path_in":")" + resolved_path + R"("})";
+            add_current_process(current_db_payload);
+        }
+    }
+    void log_write(const std::string& path) {
+        std::string resolved_path = resolve_path(path);
+        goedl_events_operation_map[resolved_path].write = true;
+        auto& table
+            = this->all_process_events_map[current_pid].operation_map[path];
+        if (!table.write) {
+            table.write = true;
+            std::string current_db_payload
+                = R"("path_out":")" + resolved_path + R"("})";
+            add_current_process(current_db_payload);
+        }
+    }
+    void log_exec(const std::string& path, const uint64_t ppid) {
+        std::string resolved_path = resolve_path(path);
+        goedl_events_operation_map[resolved_path].exec = true;
+        auto& table
+            = this->all_process_events_map[current_pid].operation_map[path];
+        if (!table.exec) {
+            table.exec = true;
+            std::string current_db_payload = R"("path_out":")" + resolved_path
+                                             + R"(","ppid":)" + ppid + R"(})";
+            add_current_process(current_db_payload);
+        }
+    }
+    void remove_path_from_operations(const std::string& path) {
+        auto& table
+            = this->all_process_events_map[current_pid].operation_map[path];
+        table.read = false;
+        table.write = false;
+        table.exec = false;
+    }
+    void rename(const std::string& origin_path, const std::string& new_path) {
+        if (this->goedl_rename_map.find(origin_path)
+            == this->goedl_rename_map.end()) {
+            this->goedl_rename_map[new_path] = origin_path;
+        } else {
+            this->goedl_rename_map[new_path]
+                = this->goedl_rename_map[origin_path];
+            this->goedl_rename_map.erase(origin_path);
+        }
+        remove_path_from_operations(origin_path);
+    }
+};
+
+void process_events(std::vector<Event> events) {
+    // std::unordered_map<std::string, std::string> exec_rename_map;
+    // std::unordered_map<std::string, std::string> exec_symlink_map;
+    bool first_event = true;
+    for (Event event : events) {
         uint64_t event_pid = event.pid;
         uint64_t event_ts = event.ts;
         SysOp op = event.operation;
         const EventPayload& event_payload = event.event_payload;
+        // DBProcessEvents current_process_events
+        //     = all_process_events.process_events_map[pid];
+        /*
         ProcessProvData& current_process_prov_data
             = current_exec_prov_data.process_map[event_pid];
         ProcessProvOperations& process_prov_operations
@@ -277,19 +272,24 @@ void process_exec(const Exec& exec, ProcessedJobData& processed_job_data) {
             .exec_prov_operations = exec_prov_operations,
             .process_prov_operations = process_prov_operations,
         };
+        */
 
         switch (op) {
             case SysOp::ProcessStart: {
-                ProcessStart process_start
-                    = std::get<ProcessStart>(event_payload);
-                uint64_t ppid = process_start.ppid;
-                current_process_prov_data.start_time = event.ts;
-                current_process_prov_data.ppid = ppid;
+                if (first_event) {
+                    ProcessStart process_start
+                        = std::get<ProcessStart>(event_payload);
+                    uint64_t ppid = process_start.ppid;
+                    // current_process_prov_data.start_time = event.ts;
+                    // current_process_prov_data.ppid = ppid;
+                    db_json = R"({"operation":"PROCESS_START", "pid":})"
+                              + event_pid + R"({})";
+                    process_json_operation_objects.push_back();
+                    first_event = false;
+                }
                 break;
             }
             case SysOp::ProcessEnd: {
-                current_process_prov_data.end_time = event.ts;
-                rename_writes(record_parameters);
                 break;
             }
             case SysOp::Write:
@@ -384,39 +384,4 @@ void process_exec(const Exec& exec, ProcessedJobData& processed_job_data) {
         events.pop();
     }
     processed_job_data.exec_prov_data_queue.push(current_exec_prov_data);
-}
-
-void process_parsed_requests(ParsedRequestQueue* parsed_request) {
-    std::unordered_map<std::string, ProcessedJobData> processed_job_data_map;
-    while (true) {
-        std::queue<ParsedRequest> request_copy = parsed_request->take_all();
-        while (!request_copy.empty()) {
-            ParsedRequest request_copy_element = request_copy.front();
-            std::string job_id = request_copy_element.job_id;
-            std::string cluster_name = request_copy_element.cluster_name;
-            std::string prov_data_key = job_id + cluster_name;
-            if (request_copy_element.type == CallType::Start) {
-                std::string path = request_copy_element.path;
-                StartOrEnd start = std::get<StartOrEnd>(
-                    request_copy_element.request_payload);
-                ProcessedJobData new_processed_prov_data
-                    = {.job_id = job_id,
-                       .cluster_name = cluster_name,
-                       .path = path,
-                       .start_time = start.ts};
-                processed_job_data_map[prov_data_key] = new_processed_prov_data;
-            } else if (request_copy_element.type == CallType::End) {
-                StartOrEnd end = std::get<StartOrEnd>(
-                    request_copy_element.request_payload);
-                processed_job_data_map[prov_data_key].end_time = end.ts;
-                print_full_job_data(processed_job_data_map[prov_data_key]);
-            } else if (request_copy_element.type == CallType::Exec) {
-                Exec exec
-                    = std::get<Exec>(request_copy_element.request_payload);
-                process_exec(exec, processed_job_data_map[prov_data_key]);
-            }
-            request_copy.pop();
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
 }
