@@ -2,9 +2,11 @@
 #include <simdjson.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <xxhash.h>
 
 #include <CLI/CLI.hpp>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -43,6 +45,27 @@ void start_preload_process(const std::string& so_path, const std::string& cmd,
     } else {
         waitpid(pid, nullptr, 0);
     }
+}
+
+void store_hash_id(const std::string& slurm_job_id,
+                   const std::string& slurm_cluster_name,
+                   const std::string& path_access) {
+    std::string ts = now_ns();
+    std::string hash_source_string = slurm_job_id + slurm_cluster_name + ts;
+    uint64_t hash_id
+        = XXH64(hash_source_string.data(), hash_source_string.size(), 0);
+    std::ofstream ofstream(path_access + "/hash_id.bin",
+                           std::ios::binary | std::ios::trunc);
+    ofstream.write(reinterpret_cast<const char*>(&hash_id), sizeof(hash_id));
+}
+
+uint64_t load_hash_id(const std::string& path_access) {
+    uint64_t value = 0;
+    std::ifstream ifstream(path_access + "/hash_id.bin", std::ios::binary);
+    if (ifstream) {
+        ifstream.read(reinterpret_cast<char*>(&value), sizeof(value));
+    }
+    return value;
 }
 
 /*std::vector<Event> parse_injector_data(const std::string& path_access) {
@@ -103,34 +126,32 @@ void send_json(const std::string& url, const std::string& json) {
     curl_easy_cleanup(curl);
 }
 
-std::string build_header(const std::string& slurm_job_id,
-                         const std::string& slurm_cluster_name,
-                         const std::string& type) {
-    return R"({"header":{"type":")" + type + R"(","slurm_job_id":")"
-           + slurm_job_id + R"(","slurm_cluster_name":")" + slurm_cluster_name
-           + R"(","timestamp":)" + now_ns() + R"(})";
+std::string build_header(const std::string& type,
+                         const std::string& path_access) {
+    uint64_t hash_id = load_hash_id(path_access);
+    return R"({"header":{"type":")" + type + R"(","hash_id":)"
+           + std::to_string(hash_id) + R"(,"timestamp":)" + now_ns() + R"(})";
 }
 
 std::string build_start_json_output(const std::string& path_start,
+                                    const std::string& path_access,
                                     const std::string& slurm_job_id,
                                     const std::string& slurm_cluster_name,
                                     const std::string& json_start_extra) {
     std::string absolute_path_start = std::filesystem::canonical(path_start);
-    std::string header
-        = build_header(slurm_job_id, slurm_cluster_name, "start");
-    return header + R"(,"payload":{"json":)" + json_start_extra + R"(,"path":")"
-           + absolute_path_start + R"("}})";
+    std::string header = build_header("start", path_access);
+    return header + R"(,"payload":{)" + R"("slurm_job_id":)" + slurm_job_id
+           + R"(,"slurm_cluster_name":")" + slurm_cluster_name + R"(","json":)"
+           + json_start_extra + R"(,"path":")" + absolute_path_start + R"("}})";
 }
 
-std::string build_end_json_output(const std::string& slurm_job_id,
-                                  const std::string& slurm_cluster_name,
+std::string build_end_json_output(const std::string& path_access,
                                   const std::string& json_end_extra) {
-    std::string header = build_header(slurm_job_id, slurm_cluster_name, "end");
+    std::string header = build_header("end", path_access);
     return header + R"(,"payload":{"json":)" + json_end_extra + "}}";
 }
 
-std::string build_exec_json_output(const std::string& slurm_job_id,
-                                   const std::string& slurm_cluster_name,
+std::string build_exec_json_output(const std::string& path_access,
                                    const std::string& path_exec,
                                    const std::string& json_exec,
                                    const std::string& cmd,
@@ -140,17 +161,12 @@ std::string build_exec_json_output(const std::string& slurm_job_id,
     bool first = true;
     for (const std::string& event : events) {
         if (!first) event_array << ",";
-        /*std::string json_with_pid = event.json;
-        size_t header_start = json_with_pid.find(R"("event_header":{)");
-        size_t insert_pos = header_start + strlen("\"event_header\":{");
-        std::string pid_field = R"("pid":)" + std::to_string(event.pid) +
-        ","; json_with_pid.insert(insert_pos, pid_field);*/
         event_array << event;
         first = false;
     }
     event_array << "]";
     std::string absolute_path_exec = std::filesystem::canonical(path_exec);
-    std::string header = build_header(slurm_job_id, slurm_cluster_name, "exec");
+    std::string header = build_header("exec", path_access);
     std::string json_string = header + R"(,"payload":{"events":)"
                               + event_array.str() + R"(,"json":)" + json_exec
                               + R"(,"path":")" + path_exec + R"(","command":")"
@@ -231,17 +247,24 @@ int main(int argc, char** argv) {
     std::string slurm_cluster_name = std::getenv("SLURM_CLUSTER_NAME")
                                          ? std::getenv("SLURM_CLUSTER_NAME")
                                          : "cname1";
+    std::string base_path = "/dev/shm/libcprov/";
+    std::string path_access = base_path + slurm_job_id + slurm_cluster_name;
     switch (parsed.mode) {
         case Mode::Start: {
+            std::filesystem::create_directories(base_path);
+            std::filesystem::create_directories(path_access);
+            std::filesystem::create_directories(path_access + "/injector_data");
+            store_hash_id(slurm_job_id, slurm_cluster_name, path_access);
             std::string start_json = build_start_json_output(
-                parsed.start_opts.path, slurm_job_id, slurm_cluster_name,
-                parsed.start_opts.json);
+                parsed.start_opts.path, path_access, slurm_job_id,
+                slurm_cluster_name, parsed.start_opts.json);
             send_json(endpoint_url, start_json);
             break;
         }
         case Mode::End: {
-            std::string end_json = build_end_json_output(
-                slurm_job_id, slurm_cluster_name, parsed.end_opts.json);
+            std::string end_json
+                = build_end_json_output(path_access, parsed.end_opts.json);
+            std::filesystem::remove_all(path_access);
             send_json(endpoint_url, end_json);
             break;
         }
@@ -251,16 +274,15 @@ int main(int argc, char** argv) {
             std::string exec_command = parsed.exec_opts.command;
             std::string absolute_path_exec
                 = std::filesystem::canonical(exec_path).string();
-            std::string path_access
-                = "/dev/shm/prov_" + std::to_string(getpid());
-            set_env_variables(absolute_path_exec, path_access);
+            std::string injector_data_path = path_access + "/injector_data";
+            set_env_variables(absolute_path_exec, injector_data_path);
             std::string injector_path = "./injector/build/libinjector.so";
-            start_preload_process(injector_path, exec_command, path_access);
+            start_preload_process(injector_path, exec_command,
+                                  injector_data_path);
             ProcessedInjectorData processed_injector_data
-                = extract_injector_data(path_access);
+                = extract_injector_data(injector_data_path);
             std::string exec_json_output = build_exec_json_output(
-                slurm_job_id, slurm_cluster_name, absolute_path_exec,
-                exec_json_input, exec_command,
+                path_access, absolute_path_exec, exec_json_input, exec_command,
                 processed_injector_data.process_json_operation_objects);
             send_json(endpoint_url, exec_json_output);
             break;

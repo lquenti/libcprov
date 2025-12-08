@@ -29,6 +29,7 @@ target_link_libraries(prov PRIVATE
     pthread
     dl
     ${SIMDJSON_LIBRARIES}
+    xxhash
 )
 
 # -------- Injector Shared Library --------
