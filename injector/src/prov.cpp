@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <CLI/CLI.hpp>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -18,6 +19,15 @@ void set_env_variables(const std::string& path_exec,
                        const std::string& path_access) {
     setenv("PROV_PATH_EXEC", path_exec.c_str(), 1);
     setenv("PROV_PATH_WRITE", path_access.c_str(), 1);
+}
+
+std::string now_ns() {
+    using namespace std::chrono;
+    uint64_t ts
+        = duration_cast<nanoseconds>(system_clock::now().time_since_epoch())
+              .count();
+    std::string ts_string = std::to_string(ts);
+    return ts_string;
 }
 
 void start_preload_process(const std::string& so_path, const std::string& cmd,
@@ -93,23 +103,30 @@ void send_json(const std::string& url, const std::string& json) {
     curl_easy_cleanup(curl);
 }
 
+std::string build_header(const std::string& slurm_job_id,
+                         const std::string& slurm_cluster_name,
+                         const std::string& type) {
+    return R"({"header":{"type":")" + type + R"(","slurm_job_id":")"
+           + slurm_job_id + R"(","slurm_cluster_name":")" + slurm_cluster_name
+           + R"(","timestamp":)" + now_ns() + R"(})";
+}
+
 std::string build_start_json_output(const std::string& path_start,
                                     const std::string& slurm_job_id,
                                     const std::string& slurm_cluster_name,
                                     const std::string& json_start_extra) {
     std::string absolute_path_start = std::filesystem::canonical(path_start);
-    return R"({"header":{"type":"start","slurm_job_id":")" + slurm_job_id
-           + R"(","slurm_cluster_name":")" + slurm_cluster_name
-           + R"("},"payload":{"json":)" + json_start_extra + R"(,"path":")"
+    std::string header
+        = build_header(slurm_job_id, slurm_cluster_name, "start");
+    return header + R"(,"payload":{"json":)" + json_start_extra + R"(,"path":")"
            + absolute_path_start + R"("}})";
 }
 
 std::string build_end_json_output(const std::string& slurm_job_id,
                                   const std::string& slurm_cluster_name,
                                   const std::string& json_end_extra) {
-    return R"({"header":{"type":"end","slurm_job_id":")" + slurm_job_id
-           + R"(","slurm_cluster_name":")" + slurm_cluster_name
-           + R"("},"payload":{"json":)" + json_end_extra + "}}";
+    std::string header = build_header(slurm_job_id, slurm_cluster_name, "end");
+    return header + R"(,"payload":{"json":)" + json_end_extra + "}}";
 }
 
 std::string build_exec_json_output(const std::string& slurm_job_id,
@@ -126,19 +143,18 @@ std::string build_exec_json_output(const std::string& slurm_job_id,
         /*std::string json_with_pid = event.json;
         size_t header_start = json_with_pid.find(R"("event_header":{)");
         size_t insert_pos = header_start + strlen("\"event_header\":{");
-        std::string pid_field = R"("pid":)" + std::to_string(event.pid) + ",";
-        json_with_pid.insert(insert_pos, pid_field);*/
+        std::string pid_field = R"("pid":)" + std::to_string(event.pid) +
+        ","; json_with_pid.insert(insert_pos, pid_field);*/
         event_array << event;
         first = false;
     }
     event_array << "]";
     std::string absolute_path_exec = std::filesystem::canonical(path_exec);
-    std::string json_string = R"({"header":{"type":"exec","slurm_job_id":")"
-                              + slurm_job_id + R"(","slurm_cluster_name":")"
-                              + slurm_cluster_name
-                              + R"("},"payload":{"events":)" + event_array.str()
-                              + R"(,"json":)" + json_exec + R"(,"path":")"
-                              + path_exec + R"(","command":")" + cmd + R"("}})";
+    std::string header = build_header(slurm_job_id, slurm_cluster_name, "exec");
+    std::string json_string = header + R"(,"payload":{"events":)"
+                              + event_array.str() + R"(,"json":)" + json_exec
+                              + R"(,"path":")" + path_exec + R"(","command":")"
+                              + cmd + R"("}})";
     return json_string;
 }
 
