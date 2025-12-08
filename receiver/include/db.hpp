@@ -2,10 +2,10 @@
 #include <sqlite3.h>
 
 #include <cstdint>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 class DB {
    public:
@@ -17,6 +17,13 @@ class DB {
     void init_job(const int64_t& job_hash_id);
     void finish_job(const int64_t& job_hash_id);
     void commit_job(const int64_t& job_hash_id);
+    void add_job(const int64_t job_hash_id, const int64_t slurm_id,
+                 const std::string& cluster_name, const int64_t start_time,
+                 const int64_t end_time, const std::string& path,
+                 const std::string& json);
+    void add_exec(const int64_t job_hash_id, const int64_t exec_hash_id,
+                  const int64_t start_time, const std::string& path,
+                  const std::string& json, const std::string& command);
     void add_read_operation(const int64_t job_hash_id,
                             const int64_t exec_hash_id, const int order_number,
                             const int pid, const std::string& path);
@@ -101,14 +108,14 @@ class DB {
         std::string path;
         std::string json;
         std::string command;
-        std::queue<OperationVariant> operations;
+        std::vector<OperationVariant> operations;
     };
 
     struct JobData {
         int64_t hash_id;
         int64_t start_time;
         int64_t end_time;
-        std::unordered_map<int64_t, ExecData> execs;
+        std::vector<ExecData> execs;
     };
 
     JobData get_job_data(const int64_t& job_hash_id);
@@ -117,6 +124,8 @@ class DB {
     std::string db_file_;
     struct JobDBContext {
         sqlite3* db = nullptr;
+        sqlite3_stmt* insert_job = nullptr;
+        sqlite3_stmt* insert_exec = nullptr;
         sqlite3_stmt* insert_process_start = nullptr;
         sqlite3_stmt* insert_read_operations = nullptr;
         sqlite3_stmt* insert_write_operations = nullptr;
