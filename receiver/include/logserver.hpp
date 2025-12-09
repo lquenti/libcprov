@@ -11,14 +11,15 @@ class LogServer {
     using Handler
         = std::function<void(const httplib::Request&, httplib::Response&)>;
     LogServer(std::string url, int port);
-    void set_log_handler(Handler h);
+    void set_log_handlers(Handler prov_api_handler, Handler graph_api_handler);
     void run(int num_threads);
 
    private:
-    httplib::Server svr;
-    std::string url;
-    Handler log_handler;
-    int port;
+    httplib::Server svr_;
+    std::string url_;
+    Handler prov_api_handler_;
+    Handler graph_api_handler_;
+    int port_;
 };
 
 #endif

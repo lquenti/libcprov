@@ -240,7 +240,7 @@ Parsed parse_cli(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-    const std::string endpoint_url = "http://127.0.0.1:9000/log";
+    const std::string endpoint_url = "http://127.0.0.1:9000/prov_api";
     Parsed parsed = parse_cli(argc, argv);
     std::string slurm_job_id
         = std::getenv("SLURM_JOB_ID") ? std::getenv("SLURM_JOB_ID") : "1";

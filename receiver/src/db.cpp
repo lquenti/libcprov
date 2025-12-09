@@ -450,19 +450,6 @@ DB::JobData DB::get_job_data(const int64_t& job_hash_id) {
                                                 sqlite3_column_text(stmt, 3))});
             }
             sqlite3_finalize(stmt);
-            std::sort(exec_data.operations.begin(), exec_data.operations.end(),
-                      [](const auto& a, const auto& b) {
-                          return std::visit(
-                                     [](auto& operation) {
-                                         return operation.order_number;
-                                     },
-                                     a)
-                                 < std::visit(
-                                     [](auto& operation) {
-                                         return operation.order_number;
-                                     },
-                                     b);
-                      });
         };
         add_operations("process_starts");
         add_operations("read_operations");
@@ -474,10 +461,6 @@ DB::JobData DB::get_job_data(const int64_t& job_hash_id) {
         add_operations("delete_operations");
         job_data.execs.push_back(std::move(exec_data));
     }
-    std::sort(job_data.execs.begin(), job_data.execs.end(),
-              [](const DB::ExecData& a, const DB::ExecData& b) {
-                  return a.start_time < b.start_time;
-              });
     sqlite3_finalize(stmt_exec);
     sqlite3_close(db);
     return job_data;
