@@ -20,6 +20,7 @@ class EventRecorder {
     void log_process_start();
     void rename(const std::string& original_path, const std::string& new_path);
     void link(const std::string& original_path, const std::string& new_path);
+    void symlink(const std::string& original_path, const std::string& new_path);
     void delete_path(const std::string& path);
 
     ProcessedInjectorData consume_prov_data();

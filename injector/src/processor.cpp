@@ -67,8 +67,8 @@ ProcessedInjectorData process_events(std::deque<Event>& events) {
             }
             case SysOp::SymLink: {
                 const auto& symlink_event = std::get<AccessInOut>(payload);
-                event_recorder.link(symlink_event.path_in,
-                                    symlink_event.path_out);
+                event_recorder.symlink(symlink_event.path_in,
+                                       symlink_event.path_out);
                 break;
             }
             case SysOp::Unlink: {

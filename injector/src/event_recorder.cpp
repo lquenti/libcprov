@@ -65,6 +65,14 @@ void EventRecorder::link(const std::string& original_path,
     goedl_link_map_[new_path] = original_path;
     std::string payload = R"("original_path":")" + original_path
                           + R"(","new_path":")" + new_path + R"("})";
+    add_current_process("LINK", payload);
+}
+void EventRecorder::symlink(const std::string& original_path,
+                            const std::string& new_path) {
+    goedl_link_map_[new_path] = original_path;
+    std::string payload = R"("original_path":")" + original_path
+                          + R"(","new_path":")" + new_path + R"("})";
+    add_current_process("SYMLINK", payload);
 }
 void EventRecorder::delete_path(const std::string& path) {
     goedl_link_map_.erase(path);

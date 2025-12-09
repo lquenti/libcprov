@@ -9,25 +9,6 @@
 #include <vector>
 
 using namespace simdjson;
-/*
-std::vector<Event> parse_injector_data(const std::string& path_access) {
-    std::vector<Event> events;
-    std::vector<std::string> filenames;
-    ondemand::parser parser;
-    for (const auto& entry : std::filesystem::directory_iterator(path_access)) {
-        std::ifstream injector_data_file(entry.path());
-        std::string json_object;
-        bool first = true;
-        uint64_t child_pid;
-        while (std::getline(injector_data_file, json_object)) {
-            ondemand::document doc = parser.iterate(json_object);
-
-            padded_string p(json_body);
-            auto doc = parser.iterate(p);
-            auto env = doc.get_object().value();
-            auto hdr = env.find_field_unordered("header").get_object().value();
-*/
-
 std::string get_string(ondemand::object& obj, const char* name) {
     auto s = obj.find_field_unordered(name).get_string();
     if (!s.error()) {
