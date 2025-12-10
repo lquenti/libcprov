@@ -13,88 +13,88 @@ class DB {
     void build_tables();
     void add_process_start(const uint64_t job_hash_id,
                            const uint64_t exec_hash_id, const int order_number,
-                           const int pid);
+                           const uint64_t pid);
     void init_job(const uint64_t& job_hash_id);
     void finish_job(const uint64_t& job_hash_id);
     void commit_job(const uint64_t& job_hash_id);
     void add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
                  const std::string& cluster_name, const uint64_t start_time,
-                 const uint64_t end_time, const std::string& path,
-                 const std::string& json);
+                 const std::string& path, const std::string& json);
     void add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
                   const uint64_t start_time, const std::string& path,
                   const std::string& json, const std::string& command);
     void add_read_operation(const uint64_t job_hash_id,
                             const uint64_t exec_hash_id, const int order_number,
-                            const int pid, const std::string& path);
+                            const uint64_t pid, const std::string& path);
     void add_write_operation(const uint64_t job_hash_id,
                              const uint64_t exec_hash_id,
-                             const int order_number, const int pid,
+                             const int order_number, const uint64_t pid,
                              const std::string& path);
     void add_execute_operation(const uint64_t job_hash_id,
                                const uint64_t exec_hash_id,
-                               const int order_number, const int pid,
-                               const int child_pid, const std::string& path);
+                               const int order_number, const uint64_t pid,
+                               const uint64_t child_pid,
+                               const std::string& path);
     void add_rename_operation(const uint64_t job_hash_id,
                               const uint64_t exec_hash_id,
-                              const int order_number, const int pid,
+                              const int order_number, const uint64_t pid,
                               const std::string& original_path,
                               const std::string& new_path);
     void add_link_operation(const uint64_t job_hash_id,
                             const uint64_t exec_hash_id, const int order_number,
-                            const int pid, const std::string& source_path,
+                            const uint64_t pid, const std::string& source_path,
                             const std::string& link_path);
     void add_symlink_operation(const uint64_t job_hash_id,
                                const uint64_t exec_hash_id,
-                               const int order_number, const int pid,
+                               const int order_number, const uint64_t pid,
                                const std::string& source_path,
                                const std::string& symlink_path);
     void add_delete_operation(const uint64_t job_hash_id,
                               const uint64_t exec_hash_id,
-                              const int order_number, const int pid,
+                              const int order_number, const uint64_t pid,
                               const std::string& path);
 
     struct ProcessStart {
         int order_number;
-        int pid;
+        uint64_t pid;
     };
     struct ReadOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string path;
     };
     struct WriteOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string path;
     };
     struct ExecuteOperation {
         int order_number;
-        int pid;
-        int child_pid;
+        uint64_t pid;
+        uint64_t child_pid;
         std::string path;
     };
     struct RenameOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string original_path;
         std::string new_path;
     };
     struct LinkOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string source_path;
         std::string link_path;
     };
     struct SymlinkOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string source_path;
         std::string symlink_path;
     };
     struct DeleteOperation {
         int order_number;
-        int pid;
+        uint64_t pid;
         std::string path;
     };
 

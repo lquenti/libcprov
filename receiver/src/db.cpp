@@ -1,6 +1,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <db.hpp>
 #include <string>
 
@@ -211,15 +212,13 @@ void DB::commit_job(const uint64_t& job_hash_id) {
 
 void DB::add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
                  const std::string& cluster_name, const uint64_t start_time,
-                 const uint64_t end_time, const std::string& path,
-                 const std::string& json) {
+                 const std::string& path, const std::string& json) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_job, 1, job_hash_id);
     sqlite3_bind_int64(job_db_context.insert_job, 2, slurm_id);
     sqlite3_bind_text(job_db_context.insert_job, 3, cluster_name.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_bind_int64(job_db_context.insert_job, 4, start_time);
-    sqlite3_bind_int64(job_db_context.insert_job, 5, end_time);
     sqlite3_bind_text(job_db_context.insert_job, 6, path.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_bind_text(job_db_context.insert_job, 7, json.c_str(), -1,
@@ -245,7 +244,7 @@ void DB::add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
 }
 void DB::add_process_start(const uint64_t job_hash_id,
                            const uint64_t exec_hash_id, const int order_number,
-                           const int pid) {
+                           const uint64_t pid) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_process_start, 1, exec_hash_id);
     sqlite3_bind_int(job_db_context.insert_process_start, 2, order_number);
@@ -255,7 +254,7 @@ void DB::add_process_start(const uint64_t job_hash_id,
 }
 void DB::add_read_operation(const uint64_t job_hash_id,
                             const uint64_t exec_hash_id, const int order_number,
-                            const int pid, const std::string& path) {
+                            const uint64_t pid, const std::string& path) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_read_operations, 1, exec_hash_id);
     sqlite3_bind_int(job_db_context.insert_read_operations, 2, order_number);
@@ -267,7 +266,7 @@ void DB::add_read_operation(const uint64_t job_hash_id,
 }
 void DB::add_write_operation(const uint64_t job_hash_id,
                              const uint64_t exec_hash_id,
-                             const int order_number, const int pid,
+                             const int order_number, const uint64_t pid,
                              const std::string& path) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_write_operations, 1, exec_hash_id);
@@ -280,8 +279,9 @@ void DB::add_write_operation(const uint64_t job_hash_id,
 }
 void DB::add_execute_operation(const uint64_t job_hash_id,
                                const uint64_t exec_hash_id,
-                               const int order_number, const int pid,
-                               const int child_pid, const std::string& path) {
+                               const int order_number, const uint64_t pid,
+                               const uint64_t child_pid,
+                               const std::string& path) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_execute_operations, 1,
                        exec_hash_id);
@@ -295,7 +295,7 @@ void DB::add_execute_operation(const uint64_t job_hash_id,
 }
 void DB::add_rename_operation(const uint64_t job_hash_id,
                               const uint64_t exec_hash_id,
-                              const int order_number, const int pid,
+                              const int order_number, const uint64_t pid,
                               const std::string& original_path,
                               const std::string& new_path) {
     auto& job_db_context = active_jobs_[job_hash_id];
@@ -312,7 +312,7 @@ void DB::add_rename_operation(const uint64_t job_hash_id,
 }
 void DB::add_link_operation(const uint64_t job_hash_id,
                             const uint64_t exec_hash_id, const int order_number,
-                            const int pid, const std::string& source_path,
+                            const uint64_t pid, const std::string& source_path,
                             const std::string& link_path) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_link_operations, 1, exec_hash_id);
@@ -327,7 +327,7 @@ void DB::add_link_operation(const uint64_t job_hash_id,
 }
 void DB::add_symlink_operation(const uint64_t job_hash_id,
                                const uint64_t exec_hash_id,
-                               const int order_number, const int pid,
+                               const int order_number, const uint64_t pid,
                                const std::string& source_path,
                                const std::string& symlink_path) {
     auto& job_db_context = active_jobs_[job_hash_id];
@@ -344,7 +344,7 @@ void DB::add_symlink_operation(const uint64_t job_hash_id,
 }
 void DB::add_delete_operation(const uint64_t job_hash_id,
                               const uint64_t exec_hash_id,
-                              const int order_number, const int pid,
+                              const int order_number, const uint64_t pid,
                               const std::string& path) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_bind_int64(job_db_context.insert_delete_operations, 1,
@@ -399,7 +399,8 @@ DB::JobData DB::get_job_data(const uint64_t& job_hash_id) {
             while (sqlite3_step(stmt) == SQLITE_ROW) {
                 std::string table_string = std::string(table);
                 int order_number = sqlite3_column_int64(stmt, 1);
-                int pid = sqlite3_column_int64(stmt, 2);
+                uint64_t pid
+                    = static_cast<uint64_t>(sqlite3_column_int64(stmt, 2));
                 if (table_string == "process_starts")
                     exec_data.operations.push_back(
                         DB::ProcessStart{order_number, pid});

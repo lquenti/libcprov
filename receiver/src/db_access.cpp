@@ -9,15 +9,49 @@
 #include "db.hpp"
 #include "model.hpp"
 
+void save_operations(DB db, const uint64_t& job_hash_id,
+                     const ExecData& exec_data) {
+    uint64_t exec_hash_id = exec_data.exec_hash_id;
+    for (Event event : exec_data.events) {
+        uint64_t pid = event.pid;
+        int order_number = event.order_number;
+        switch (event.operation_type) {
+            case OperationType::ProcessStart:
+                db.add_process_start(job_hash_id, exec_hash_id, order_number,
+                                     pid);
+        }
+    }
+}
+
 void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
     uint64_t job_hash_id = parsed_injector_data.job_hash_id;
+    uint64_t timestamp = parsed_injector_data.timestamp;
     switch (parsed_injector_data.injector_data_type) {
-        case InjectorDataType::Start:
+        case InjectorDataType::Start: {
             db.init_job(job_hash_id);
+            StartData start_data
+                = std::get<StartData>(parsed_injector_data.payload);
+            uint64_t slurm_job_id = start_data.slurm_job_id;
+            std::string slurm_cluster_name = start_data.slurm_cluster_name;
+            std::string path_start = start_data.path;
+            std::string json_start = start_data.json;
+            db.add_job(job_hash_id, slurm_job_id, slurm_cluster_name, timestamp,
+                       path_start, json_start);
             break;
+        }
         case InjectorDataType::End:
             db.finish_job(job_hash_id);
             break;
+        case InjectorDataType::Exec:
+            ExecData exec_data
+                = std::get<ExecData>(parsed_injector_data.payload);
+            uint64_t exec_hash_id = exec_data.exec_hash_id;
+            std::string path_exec = exec_data.path;
+            std::string json_exec = exec_data.json;
+            std::string command_exec = exec_data.command;
+            db.add_exec(job_hash_id, exec_hash_id, timestamp, path_exec,
+                        json_exec, command_exec);
+            save_operation(db, parsed_injector_data);
     }
 }
 

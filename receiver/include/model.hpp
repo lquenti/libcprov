@@ -70,6 +70,7 @@ struct ExecData {
     std::vector<Event> events;
     std::string json;
     std::string path;
+    std::string command;
 };
 
 struct ParsedInjectorData {

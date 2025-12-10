@@ -145,8 +145,9 @@ ParsedInjectorData parse_injector_data(const std::string& request_body) {
                 = parse_events(payload["events"].get_array());
             std::string json = get_string(payload, "json");
             std::string path = get_string(payload, "path");
+            std::string command = get_string(payload, "command");
             parsed_injector_data.payload
-                = ExecData{exec_hash_id, events, json, path};
+                = ExecData{exec_hash_id, events, json, path, command};
             break;
     }
     return parsed_injector_data;
