@@ -110,6 +110,19 @@ std::vector<Event> parse_events(ondemand::array simdjson_events) {
     return parsed_events;
 }
 
+ExecData get_exec_data(const uint64_t& job_hash_id, const uint64_t& timestamp,
+                       ondemand::object& payload) {
+    std::string exec_hash_source_string
+        = std::to_string(job_hash_id) + std::to_string(timestamp);
+    uint64_t exec_hash_id = XXH64(exec_hash_source_string.data(),
+                                  exec_hash_source_string.size(), 0);
+    std::vector<Event> events = parse_events(payload["events"].get_array());
+    std::string json = get_string(payload, "json");
+    std::string path = get_string(payload, "path");
+    std::string command = get_string(payload, "command");
+    return ExecData{exec_hash_id, events, json, path, command};
+}
+
 ParsedInjectorData parse_injector_data(const std::string& request_body) {
     ondemand::parser parser;
     padded_string padded_request_body_string(request_body);
@@ -126,29 +139,26 @@ ParsedInjectorData parse_injector_data(const std::string& request_body) {
     parsed_injector_data.timestamp = timestamp;
     ondemand::object payload = doc["payload"].get_object().value();
     switch (parsed_injector_data.injector_data_type) {
-        case InjectorDataType::Start: {
-            parsed_injector_data.payload = StartData{
-                get_uint64(payload, "slurm_job_id"),
-                get_string(payload, "slurm_cluster_name"),
-                get_string(payload, "json"), get_string(payload, "path")};
-            break;
-        }
-        case InjectorDataType::End:
+        case InjectorDataType::End: {
             parsed_injector_data.payload = EndData{get_string(payload, "json")};
             break;
-        case InjectorDataType::Exec:
-            std::string exec_hash_source_string
-                = std::to_string(job_hash_id) + std::to_string(timestamp);
-            uint64_t exec_hash_id = XXH64(exec_hash_source_string.data(),
-                                          exec_hash_source_string.size(), 0);
-            std::vector<Event> events
-                = parse_events(payload["events"].get_array());
-            std::string json = get_string(payload, "json");
-            std::string path = get_string(payload, "path");
-            std::string command = get_string(payload, "command");
+        }
+        case InjectorDataType::Start: {
+            ExecData exec_data = get_exec_data(job_hash_id, timestamp, payload);
+            ondemand::object start_data
+                = payload["start_data"].get_object().value();
             parsed_injector_data.payload
-                = ExecData{exec_hash_id, events, json, path, command};
+                = StartData{get_uint64(start_data, "slurm_job_id"),
+                            get_string(start_data, "slurm_cluster_name"),
+                            get_string(start_data, "json"),
+                            get_string(start_data, "path"), exec_data};
             break;
+        }
+        case InjectorDataType::Exec: {
+            parsed_injector_data.payload
+                = get_exec_data(job_hash_id, timestamp, payload);
+            break;
+        }
     }
     return parsed_injector_data;
 }

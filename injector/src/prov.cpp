@@ -81,12 +81,6 @@ ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     return processed_injector_data;
 }
 
-/*
-void store_start_json(const std::string& path_access,
-                      const std::string& start_json) {
-
-}*/
-
 void send_json(const std::string& url, const std::string& json) {
     CURL* curl = curl_easy_init();
     if (!curl) return;
@@ -120,11 +114,10 @@ std::string build_start_json_output(const std::string& path_start,
                                     const std::string& slurm_cluster_name,
                                     const std::string& json_start_extra) {
     std::string absolute_path_start = std::filesystem::canonical(path_start);
-    std::string header = build_header("start", path_access);
-    return header + R"(,"payload":{)" + R"("slurm_job_id":)" + slurm_job_id
+    return R"(","start_data":{"slurm_job_id":)" + slurm_job_id
            + R"(,"slurm_cluster_name":")" + slurm_cluster_name + R"(","json":")"
            + json_start_extra + R"(","path":")" + absolute_path_start
-           + R"("}})";
+           + R"("}}})";
 }
 
 std::string build_end_json_output(const std::string& path_access,
@@ -138,6 +131,14 @@ std::string build_exec_json_output(const std::string& path_access,
                                    const std::string& json_exec,
                                    const std::string& cmd,
                                    const std::vector<std::string>& events) {
+    std::string type = "exec";
+    std::string start_data = R"("}})";
+    std::string start_data_path = path_access + "/start_data.txt";
+    if (std::filesystem::exists(start_data_path)) {
+        type = "start";
+        std::getline(std::ifstream(start_data_path), start_data);
+        std::filesystem::remove(start_data_path);
+    }
     std::ostringstream event_array;
     event_array << "[";
     bool first = true;
@@ -148,11 +149,11 @@ std::string build_exec_json_output(const std::string& path_access,
     }
     event_array << "]";
     std::string absolute_path_exec = std::filesystem::canonical(path_exec);
-    std::string header = build_header("exec", path_access);
+    std::string header = build_header(type, path_access);
     std::string json_string = header + R"(,"payload":{"events":)"
                               + event_array.str() + R"(,"json":")" + json_exec
                               + R"(","path":")" + path_exec + R"(","command":")"
-                              + cmd + R"("}})";
+                              + cmd + start_data;
     return json_string;
 }
 
@@ -240,8 +241,8 @@ int main(int argc, char** argv) {
             std::string start_json = build_start_json_output(
                 parsed.start_opts.path, path_access, slurm_job_id,
                 slurm_cluster_name, parsed.start_opts.json);
-            // store_start_json(path_access, start_json);
-            send_json(endpoint_url, start_json);
+            std::ofstream(path_access + "/start_data.txt") << start_json;
+            // send_json(endpoint_url, start_json);
             break;
         }
         case Mode::End: {

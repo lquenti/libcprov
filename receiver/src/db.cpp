@@ -6,7 +6,7 @@
 #include <string>
 
 DB::DB() {
-    db_file_ = "/dev/shm/libcprov.db";
+    db_file_ = "/dev/shm/libcprov/libcprov.db";
 }
 
 void DB::build_tables() {

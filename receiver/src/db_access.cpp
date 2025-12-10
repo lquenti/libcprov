@@ -81,10 +81,27 @@ void save_operations(DB db, const uint64_t& job_hash_id,
     }
 }
 
-void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
+void handleExecCase(DB& db, const uint64_t& job_hash_id,
+                    const uint64_t& timestamp, const ExecData& exec_data) {
+    uint64_t exec_hash_id = exec_data.exec_hash_id;
+    std::string path_exec = exec_data.path;
+    std::string json_exec = exec_data.json;
+    std::string command_exec = exec_data.command;
+    db.add_exec(job_hash_id, exec_hash_id, timestamp, path_exec, json_exec,
+                command_exec);
+    save_operations(db, job_hash_id, exec_data);
+    db.commit_job(job_hash_id);
+}
+
+void save_db_data(DB& db, const ParsedInjectorData& parsed_injector_data) {
     uint64_t job_hash_id = parsed_injector_data.job_hash_id;
     uint64_t timestamp = parsed_injector_data.timestamp;
     switch (parsed_injector_data.injector_data_type) {
+        case InjectorDataType::End:
+            db.set_job_end_time(job_hash_id, timestamp);
+            db.commit_job(job_hash_id);
+            db.finish_job(job_hash_id);
+            break;
         case InjectorDataType::Start: {
             db.init_job(job_hash_id);
             StartData start_data
@@ -93,27 +110,17 @@ void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
             std::string slurm_cluster_name = start_data.slurm_cluster_name;
             std::string path_start = start_data.path;
             std::string json_start = start_data.json;
+            ExecData exec_data = start_data.exec_data;
             db.add_job(job_hash_id, slurm_job_id, slurm_cluster_name, timestamp,
                        path_start, json_start);
             db.commit_job(job_hash_id);
+            handleExecCase(db, job_hash_id, timestamp, exec_data);
             break;
         }
-        case InjectorDataType::End:
-            db.set_job_end_time(job_hash_id, timestamp);
-            db.commit_job(job_hash_id);
-            db.finish_job(job_hash_id);
-            break;
         case InjectorDataType::Exec: {
             ExecData exec_data
                 = std::get<ExecData>(parsed_injector_data.payload);
-            uint64_t exec_hash_id = exec_data.exec_hash_id;
-            std::string path_exec = exec_data.path;
-            std::string json_exec = exec_data.json;
-            std::string command_exec = exec_data.command;
-            db.add_exec(job_hash_id, exec_hash_id, timestamp, path_exec,
-                        json_exec, command_exec);
-            save_operations(db, job_hash_id, exec_data);
-            db.commit_job(job_hash_id);
+            handleExecCase(db, job_hash_id, timestamp, exec_data);
         }
     }
 }

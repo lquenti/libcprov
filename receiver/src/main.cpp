@@ -9,7 +9,7 @@
 #include "parser.hpp"
 
 int main() {
-    std::mutex data_mutex;
+    std::mutex db_mutex;
     std::string url = "127.0.0.1";
     int port = 9000;
     LogServer server(url, port);
@@ -19,7 +19,10 @@ int main() {
         [&](const httplib::Request& req, httplib::Response& res) {
             ParsedInjectorData parsed_injector_data
                 = parse_injector_data(req.body);
-            save_db_data(db, parsed_injector_data);
+            {
+                std::lock_guard<std::mutex> lock(db_mutex);
+                save_db_data(db, parsed_injector_data);
+            }
             std::cerr << "[http] POST /log size=" << req.body.size() << "\n";
             std::cerr << req.body << "\n";
             res.status = 200;

@@ -7,17 +7,6 @@
 
 enum class InjectorDataType { Start, End, Exec };
 
-struct StartData {
-    uint64_t slurm_job_id;
-    std::string slurm_cluster_name;
-    std::string json;
-    std::string path;
-};
-
-struct EndData {
-    std::string json;
-};
-
 enum class OperationType {
     ProcessStart,
     Read,
@@ -71,6 +60,18 @@ struct ExecData {
     std::string json;
     std::string path;
     std::string command;
+};
+
+struct StartData {
+    uint64_t slurm_job_id;
+    std::string slurm_cluster_name;
+    std::string json;
+    std::string path;
+    ExecData exec_data;
+};
+
+struct EndData {
+    std::string json;
 };
 
 struct ParsedInjectorData {
