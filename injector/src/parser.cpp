@@ -9,20 +9,17 @@
 #include <vector>
 
 using namespace simdjson;
+
 std::string get_string(ondemand::object& obj, const char* name) {
-    auto s = obj.find_field_unordered(name).get_string();
-    if (!s.error()) {
-        return std::string(s.value());
-    }
-    return "";
+    simdjson_result<std::string_view> result
+        = obj.find_field_unordered(name).get_string();
+    return std::string(result.value());
 }
 
 uint64_t get_uint64(ondemand::object& obj, const char* name) {
-    auto s = obj.find_field_unordered(name).get_uint64();
-    if (!s.error()) {
-        return s.value();
-    }
-    return 0;
+    simdjson_result<uint64_t> result
+        = obj.find_field_unordered(name).get_uint64();
+    return result.value();
 }
 
 bool one_of(std::string_view t, std::string_view a) {
@@ -137,10 +134,10 @@ Event parse_event_object(ondemand::object event_obj, uint64_t& pid) {
 }
 
 std::vector<Event> parse_jsonl_file(const std::string& path,
-                                    simdjson::ondemand::parser& parser) {
+                                    ondemand::parser& parser) {
     std::vector<Event> events;
-    auto p_res = simdjson::padded_string::load(path);
-    simdjson::padded_string p = std::move(p_res.value());
+    auto p_res = padded_string::load(path);
+    padded_string p = std::move(p_res.value());
     uint64_t current_pid = 0;
     auto stream_res = parser.iterate_many(p.data(), p.size(), size_t(1) << 20);
     for (auto doc : *stream_res) {
@@ -153,7 +150,7 @@ std::vector<Event> parse_jsonl_file(const std::string& path,
 
 std::vector<Event> parse_all_jsonl_files(const std::string& path_access) {
     std::vector<Event> all_events;
-    simdjson::ondemand::parser parser;
+    ondemand::parser parser;
     for (const auto& entry : std::filesystem::directory_iterator(path_access)) {
         auto processed = parse_jsonl_file(entry.path().string(), parser);
         all_events.reserve(all_events.size() + processed.size());

@@ -18,7 +18,7 @@ void EventRecorder::log_read(const std::string& path) {
     if (!table.read) {
         table.read = true;
         std::string payload = R"("path_in":")" + path + R"("})";
-        add_current_process("WRITE", payload);
+        add_current_process("READ", payload);
     }
 }
 void EventRecorder::log_write(const std::string& path) {
@@ -28,7 +28,7 @@ void EventRecorder::log_write(const std::string& path) {
     if (!table.write) {
         table.write = true;
         std::string payload = R"("path_out":")" + path + R"("})";
-        add_current_process("READ", payload);
+        add_current_process("WRITE", payload);
     }
 }
 void EventRecorder::log_exec(const std::string& path, const uint64_t& pid) {
@@ -101,7 +101,7 @@ void EventRecorder::add_current_process(const std::string& current_operation,
                       + std::to_string(current_pid_) + R"(,"order_number":)"
                       + std::to_string(current_order_number_)
                       + R"(,"event_data":)" + R"({)" + event_data_payload
-                      + R"(}})";
+                      + R"(})";
     current_order_number_++;
     process_json_operation_objects_.push_back(std::move(obj));
 }

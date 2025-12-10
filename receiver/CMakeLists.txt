@@ -25,10 +25,19 @@ add_executable(libcprov_receiver
     src/logserver.cpp
     src/db.cpp
     src/db_fetcher.cpp
+    src/parser.cpp
 )
 
-target_include_directories(libcprov_receiver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(libcprov_receiver PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
-target_link_libraries(libcprov_receiver PRIVATE ${SIMDJSON_LIB} SQLite::SQLite3)
+target_link_libraries(libcprov_receiver PRIVATE
+    ${SIMDJSON_LIB}
+    SQLite::SQLite3
+    xxhash
+)
 
-target_include_directories(libcprov_receiver PRIVATE include ${httplib_SOURCE_DIR})
+target_include_directories(libcprov_receiver PRIVATE include 
+    ${httplib_SOURCE_DIR}
+)

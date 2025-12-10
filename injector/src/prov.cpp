@@ -141,14 +141,15 @@ std::string build_start_json_output(const std::string& path_start,
     std::string absolute_path_start = std::filesystem::canonical(path_start);
     std::string header = build_header("start", path_access);
     return header + R"(,"payload":{)" + R"("slurm_job_id":)" + slurm_job_id
-           + R"(,"slurm_cluster_name":")" + slurm_cluster_name + R"(","json":)"
-           + json_start_extra + R"(,"path":")" + absolute_path_start + R"("}})";
+           + R"(,"slurm_cluster_name":")" + slurm_cluster_name + R"(","json":")"
+           + json_start_extra + R"(","path":")" + absolute_path_start
+           + R"("}})";
 }
 
 std::string build_end_json_output(const std::string& path_access,
                                   const std::string& json_end_extra) {
     std::string header = build_header("end", path_access);
-    return header + R"(,"payload":{"json":)" + json_end_extra + "}}";
+    return header + R"(,"payload":{"json":")" + json_end_extra + R"("}})";
 }
 
 std::string build_exec_json_output(const std::string& path_access,
@@ -168,8 +169,8 @@ std::string build_exec_json_output(const std::string& path_access,
     std::string absolute_path_exec = std::filesystem::canonical(path_exec);
     std::string header = build_header("exec", path_access);
     std::string json_string = header + R"(,"payload":{"events":)"
-                              + event_array.str() + R"(,"json":)" + json_exec
-                              + R"(,"path":")" + path_exec + R"(","command":")"
+                              + event_array.str() + R"(,"json":")" + json_exec
+                              + R"(","path":")" + path_exec + R"(","command":")"
                               + cmd + R"("}})";
     return json_string;
 }
