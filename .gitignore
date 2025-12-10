@@ -11,6 +11,13 @@ injector/CMakeCache.txt
 injector/cmake_install.cmake
 injector/Makefile
 injector/.cache
+visualizer/build/
+visualizer/CMakeFiles/
+visualizer/CMakeCache.txt
+visualizer/cmake_install.cmake
+visualizer/Makefile
+visualizer/.cache
+
 *.o
 *.so
 *.a
