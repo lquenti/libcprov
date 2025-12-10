@@ -24,7 +24,7 @@ add_executable(libcprov_receiver
     src/main.cpp
     src/logserver.cpp
     src/db.cpp
-    src/db_fetcher.cpp
+    src/db_access.cpp
     src/parser.cpp
 )
 

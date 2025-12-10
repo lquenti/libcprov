@@ -6,6 +6,21 @@
 #include <string>
 #include <variant>
 
+#include "db.hpp"
+#include "model.hpp"
+
+void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
+    uint64_t job_hash_id = parsed_injector_data.job_hash_id;
+    switch (parsed_injector_data.injector_data_type) {
+        case InjectorDataType::Start:
+            db.init_job(job_hash_id);
+            break;
+        case InjectorDataType::End:
+            db.finish_job(job_hash_id);
+            break;
+    }
+}
+
 void order_job_data(DB::JobData& job_data) {
     for (DB::ExecData& exec : job_data.execs) {
         std::sort(exec.operations.begin(), exec.operations.end(),

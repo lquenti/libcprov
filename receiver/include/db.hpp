@@ -11,89 +11,90 @@ class DB {
    public:
     DB();
     void build_tables();
-    void add_process_start(const int64_t job_hash_id,
-                           const int64_t exec_hash_id, const int order_number,
+    void add_process_start(const uint64_t job_hash_id,
+                           const uint64_t exec_hash_id, const int order_number,
                            const int pid);
-    void init_job(const int64_t& job_hash_id);
-    void finish_job(const int64_t& job_hash_id);
-    void commit_job(const int64_t& job_hash_id);
-    void add_job(const int64_t job_hash_id, const int64_t slurm_id,
-                 const std::string& cluster_name, const int64_t start_time,
-                 const int64_t end_time, const std::string& path,
+    void init_job(const uint64_t& job_hash_id);
+    void finish_job(const uint64_t& job_hash_id);
+    void commit_job(const uint64_t& job_hash_id);
+    void add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
+                 const std::string& cluster_name, const uint64_t start_time,
+                 const uint64_t end_time, const std::string& path,
                  const std::string& json);
-    void add_exec(const int64_t job_hash_id, const int64_t exec_hash_id,
-                  const int64_t start_time, const std::string& path,
+    void add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
+                  const uint64_t start_time, const std::string& path,
                   const std::string& json, const std::string& command);
-    void add_read_operation(const int64_t job_hash_id,
-                            const int64_t exec_hash_id, const int order_number,
+    void add_read_operation(const uint64_t job_hash_id,
+                            const uint64_t exec_hash_id, const int order_number,
                             const int pid, const std::string& path);
-    void add_write_operation(const int64_t job_hash_id,
-                             const int64_t exec_hash_id, const int order_number,
-                             const int pid, const std::string& path);
-    void add_execute_operation(const int64_t job_hash_id,
-                               const int64_t exec_hash_id,
+    void add_write_operation(const uint64_t job_hash_id,
+                             const uint64_t exec_hash_id,
+                             const int order_number, const int pid,
+                             const std::string& path);
+    void add_execute_operation(const uint64_t job_hash_id,
+                               const uint64_t exec_hash_id,
                                const int order_number, const int pid,
                                const int child_pid, const std::string& path);
-    void add_rename_operation(const int64_t job_hash_id,
-                              const int64_t exec_hash_id,
+    void add_rename_operation(const uint64_t job_hash_id,
+                              const uint64_t exec_hash_id,
                               const int order_number, const int pid,
                               const std::string& original_path,
                               const std::string& new_path);
-    void add_link_operation(const int64_t job_hash_id,
-                            const int64_t exec_hash_id, const int order_number,
+    void add_link_operation(const uint64_t job_hash_id,
+                            const uint64_t exec_hash_id, const int order_number,
                             const int pid, const std::string& source_path,
                             const std::string& link_path);
-    void add_symlink_operation(const int64_t job_hash_id,
-                               const int64_t exec_hash_id,
+    void add_symlink_operation(const uint64_t job_hash_id,
+                               const uint64_t exec_hash_id,
                                const int order_number, const int pid,
                                const std::string& source_path,
                                const std::string& symlink_path);
-    void add_delete_operation(const int64_t job_hash_id,
-                              const int64_t exec_hash_id,
+    void add_delete_operation(const uint64_t job_hash_id,
+                              const uint64_t exec_hash_id,
                               const int order_number, const int pid,
                               const std::string& path);
 
     struct ProcessStart {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
     };
     struct ReadOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string path;
     };
     struct WriteOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string path;
     };
     struct ExecuteOperation {
-        int64_t order_number;
-        int64_t pid;
-        int64_t child_pid;
+        int order_number;
+        int pid;
+        int child_pid;
         std::string path;
     };
     struct RenameOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string original_path;
         std::string new_path;
     };
     struct LinkOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string source_path;
         std::string link_path;
     };
     struct SymlinkOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string source_path;
         std::string symlink_path;
     };
     struct DeleteOperation {
-        int64_t order_number;
-        int64_t pid;
+        int order_number;
+        int pid;
         std::string path;
     };
 
@@ -103,8 +104,8 @@ class DB {
                        SymlinkOperation, DeleteOperation>;
 
     struct ExecData {
-        int64_t hash_id;
-        int64_t start_time;
+        uint64_t hash_id;
+        uint64_t start_time;
         std::string path;
         std::string json;
         std::string command;
@@ -112,13 +113,13 @@ class DB {
     };
 
     struct JobData {
-        int64_t hash_id;
-        int64_t start_time;
-        int64_t end_time;
+        uint64_t hash_id;
+        uint64_t start_time;
+        uint64_t end_time;
         std::vector<ExecData> execs;
     };
 
-    JobData get_job_data(const int64_t& job_hash_id);
+    JobData get_job_data(const uint64_t& job_hash_id);
 
    private:
     std::string db_file_;
@@ -135,5 +136,5 @@ class DB {
         sqlite3_stmt* insert_symlink_operations = nullptr;
         sqlite3_stmt* insert_delete_operations = nullptr;
     };
-    std::unordered_map<int64_t, JobDBContext> active_jobs_;
+    std::unordered_map<uint64_t, JobDBContext> active_jobs_;
 };
