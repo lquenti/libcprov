@@ -20,6 +20,7 @@ class DB {
     void add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
                  const std::string& cluster_name, const uint64_t start_time,
                  const std::string& path, const std::string& json);
+    void set_job_end_time(uint64_t job_hash_id, uint64_t end_time);
     void add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
                   const uint64_t start_time, const std::string& path,
                   const std::string& json, const std::string& command);
@@ -126,6 +127,7 @@ class DB {
     struct JobDBContext {
         sqlite3* db = nullptr;
         sqlite3_stmt* insert_job = nullptr;
+        sqlite3_stmt* update_end_time_job = nullptr;
         sqlite3_stmt* insert_exec = nullptr;
         sqlite3_stmt* insert_process_start = nullptr;
         sqlite3_stmt* insert_read_operations = nullptr;

@@ -11,7 +11,7 @@ DB::DB() {
 
 void DB::build_tables() {
     sqlite3* db = nullptr;
-    int db_connection = sqlite3_open("example.db", &db);
+    int db_connection = sqlite3_open(db_file_.c_str(), &db);
     sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
     char* err = nullptr;
     const char* db_tables
@@ -144,6 +144,9 @@ void DB::init_job(const uint64_t& job_hash_id) {
                        "VALUES (?, ?, ?, ?, ?, ?, ?);",
                        -1, &job_db_context.insert_job, nullptr);
     sqlite3_prepare_v2(job_db_context.db,
+                       "UPDATE jobs SET end_time = ? WHERE hash_id = ?;", -1,
+                       &job_db_context.update_end_time_job, nullptr);
+    sqlite3_prepare_v2(job_db_context.db,
                        "INSERT INTO execs(hash_id, job_hash_id, start_time, "
                        "path, json, command) "
                        "VALUES (?, ?, ?, ?, ?, ?);",
@@ -190,6 +193,7 @@ void DB::finish_job(const uint64_t& job_hash_id) {
     auto& job_db_context = active_jobs_[job_hash_id];
     sqlite3_exec(job_db_context.db, "COMMIT;", nullptr, nullptr, nullptr);
     sqlite3_finalize(job_db_context.insert_job);
+    sqlite3_finalize(job_db_context.update_end_time_job);
     sqlite3_finalize(job_db_context.insert_exec);
     sqlite3_finalize(job_db_context.insert_process_start);
     sqlite3_finalize(job_db_context.insert_read_operations);
@@ -219,12 +223,20 @@ void DB::add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
     sqlite3_bind_text(job_db_context.insert_job, 3, cluster_name.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_bind_int64(job_db_context.insert_job, 4, start_time);
+    sqlite3_bind_int64(job_db_context.insert_job, 5, -1);
     sqlite3_bind_text(job_db_context.insert_job, 6, path.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_bind_text(job_db_context.insert_job, 7, json.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_step(job_db_context.insert_job);
     sqlite3_reset(job_db_context.insert_job);
+}
+void DB::set_job_end_time(uint64_t job_hash_id, uint64_t end_time) {
+    auto& job_db_context = active_jobs_[job_hash_id];
+    sqlite3_bind_int64(job_db_context.update_end_time_job, 1, end_time);
+    sqlite3_bind_int64(job_db_context.update_end_time_job, 2, job_hash_id);
+    sqlite3_step(job_db_context.update_end_time_job);
+    sqlite3_reset(job_db_context.update_end_time_job);
 }
 void DB::add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
                   const uint64_t start_time, const std::string& path,
@@ -415,7 +427,7 @@ DB::JobData DB::get_job_data(const uint64_t& job_hash_id) {
                 if (table_string == "execute_operations")
                     exec_data.operations.push_back(DB::ExecuteOperation{
                         order_number, pid,
-                        static_cast<int>(sqlite3_column_int64(stmt, 3)),
+                        static_cast<uint64_t>(sqlite3_column_int64(stmt, 3)),
                         (const char*)sqlite3_column_text(stmt, 4)});
                 if (table_string == "rename_operations")
                     exec_data.operations.push_back(DB::RenameOperation{

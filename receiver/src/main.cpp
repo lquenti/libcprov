@@ -19,7 +19,7 @@ int main() {
         [&](const httplib::Request& req, httplib::Response& res) {
             ParsedInjectorData parsed_injector_data
                 = parse_injector_data(req.body);
-            // save_db_data(db, parsed_injector_data);
+            save_db_data(db, parsed_injector_data);
             std::cerr << "[http] POST /log size=" << req.body.size() << "\n";
             std::cerr << req.body << "\n";
             res.status = 200;

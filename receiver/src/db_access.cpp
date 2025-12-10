@@ -15,10 +15,68 @@ void save_operations(DB db, const uint64_t& job_hash_id,
     for (Event event : exec_data.events) {
         uint64_t pid = event.pid;
         int order_number = event.order_number;
+        std::variant<ProcessStart, Read, Write, Execute, Rename, Link, Symlink,
+                     Delete>
+            operation_data = event.operation_data;
         switch (event.operation_type) {
             case OperationType::ProcessStart:
                 db.add_process_start(job_hash_id, exec_hash_id, order_number,
                                      pid);
+                break;
+            case OperationType::Read: {
+                Read read = std::get<Read>(operation_data);
+                std::string path = read.path_in;
+                db.add_read_operation(job_hash_id, exec_hash_id, order_number,
+                                      pid, path);
+                break;
+            }
+            case OperationType::Write: {
+                Write write = std::get<Write>(operation_data);
+                std::string path = write.path_out;
+                db.add_write_operation(job_hash_id, exec_hash_id, order_number,
+                                       pid, path);
+                break;
+            }
+            case OperationType::Execute: {
+                Execute execute = std::get<Execute>(operation_data);
+                uint64_t child_pid = execute.child_pid;
+                std::string path = execute.path_exec;
+                db.add_execute_operation(job_hash_id, exec_hash_id,
+                                         order_number, pid, child_pid, path);
+                break;
+            }
+            case OperationType::Rename: {
+                Rename rename = std::get<Rename>(operation_data);
+                std::string original_path = rename.original_path;
+                std::string new_path = rename.new_path;
+                db.add_rename_operation(job_hash_id, exec_hash_id, order_number,
+                                        pid, original_path, new_path);
+                break;
+            }
+            case OperationType::Link: {
+                Link link = std::get<Link>(operation_data);
+                std::string original_path = link.original_path;
+                std::string new_path = link.new_path;
+                db.add_link_operation(job_hash_id, exec_hash_id, order_number,
+                                      pid, original_path, new_path);
+                break;
+            }
+            case OperationType::Symlink: {
+                Symlink symlink = std::get<Symlink>(operation_data);
+                std::string original_path = symlink.original_path;
+                std::string new_path = symlink.new_path;
+                db.add_symlink_operation(job_hash_id, exec_hash_id,
+                                         order_number, pid, original_path,
+                                         new_path);
+                break;
+            }
+            case OperationType::Delete: {
+                Delete delete_obj = std::get<Delete>(operation_data);
+                std::string path = delete_obj.deleted_path;
+                db.add_delete_operation(job_hash_id, exec_hash_id, order_number,
+                                        pid, path);
+                break;
+            }
         }
     }
 }
@@ -37,12 +95,15 @@ void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
             std::string json_start = start_data.json;
             db.add_job(job_hash_id, slurm_job_id, slurm_cluster_name, timestamp,
                        path_start, json_start);
+            db.commit_job(job_hash_id);
             break;
         }
         case InjectorDataType::End:
+            db.set_job_end_time(job_hash_id, timestamp);
+            db.commit_job(job_hash_id);
             db.finish_job(job_hash_id);
             break;
-        case InjectorDataType::Exec:
+        case InjectorDataType::Exec: {
             ExecData exec_data
                 = std::get<ExecData>(parsed_injector_data.payload);
             uint64_t exec_hash_id = exec_data.exec_hash_id;
@@ -51,7 +112,9 @@ void save_db_data(DB db, const ParsedInjectorData& parsed_injector_data) {
             std::string command_exec = exec_data.command;
             db.add_exec(job_hash_id, exec_hash_id, timestamp, path_exec,
                         json_exec, command_exec);
-            save_operation(db, parsed_injector_data);
+            save_operations(db, job_hash_id, exec_data);
+            db.commit_job(job_hash_id);
+        }
     }
 }
 

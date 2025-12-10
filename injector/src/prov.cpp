@@ -68,31 +68,6 @@ uint64_t load_hash_id(const std::string& path_access) {
     return value;
 }
 
-/*std::vector<Event> parse_injector_data(const std::string& path_access) {
-    std::vector<Event> events;
-    std::vector<std::string> filenames;
-    ondemand::parser parser;
-    for (const auto& entry : std::filesystem::directory_iterator(path_access)) {
-        std::ifstream injector_data_file(entry.path());
-        std::string json_object;
-        bool first = true;
-        uint64_t child_pid;
-        while (std::getline(injector_data_file, json_object)) {
-            ondemand::document doc = parser.iterate(json_object);
-            if (first) {
-                child_pid = doc["event_data"]["pid"].get_uint64().value();
-                first = false;
-            }
-            uint64_t new_ts = doc["event_header"]["ts"].get_uint64().value();
-            events.push_back({new_ts, child_pid, json_object});
-        }
-    }
-    std::filesystem::remove_all(path_access);
-    std::sort(events.begin(), events.end(),
-              [](const Event& a, const Event& b) { return a.ts < b.ts; });
-    return events;
-}*/
-
 ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     std::vector<Event> events = parse_all_jsonl_files(path_access);
     std::filesystem::remove_all(path_access);
@@ -105,6 +80,12 @@ ProcessedInjectorData extract_injector_data(const std::string& path_access) {
         = process_events(events_queue);
     return processed_injector_data;
 }
+
+/*
+void store_start_json(const std::string& path_access,
+                      const std::string& start_json) {
+
+}*/
 
 void send_json(const std::string& url, const std::string& json) {
     CURL* curl = curl_easy_init();
@@ -259,6 +240,7 @@ int main(int argc, char** argv) {
             std::string start_json = build_start_json_output(
                 parsed.start_opts.path, path_access, slurm_job_id,
                 slurm_cluster_name, parsed.start_opts.json);
+            // store_start_json(path_access, start_json);
             send_json(endpoint_url, start_json);
             break;
         }
