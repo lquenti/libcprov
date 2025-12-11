@@ -6,10 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE Debug)
 
+find_package(CURL REQUIRED)
+
 find_library(SIMDJSON_LIB simdjson REQUIRED)
 
 add_executable(libcprov_visualizer
     src/main.cpp
+    src/parser.cpp
 )
 
 target_include_directories(libcprov_visualizer PRIVATE 
@@ -17,5 +20,6 @@ target_include_directories(libcprov_visualizer PRIVATE
 )
 
 target_link_libraries(libcprov_visualizer PRIVATE
+    CURL::libcurl
     ${SIMDJSON_LIB}
 )
