@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+#include "model.hpp"
+
 class DB {
    public:
     DB();
@@ -54,70 +56,20 @@ class DB {
                               const uint64_t exec_hash_id,
                               const int order_number, const uint64_t pid,
                               const std::string& path);
-
-    struct ProcessStart {
-        int order_number;
-        uint64_t pid;
-    };
-    struct ReadOperation {
-        int order_number;
-        uint64_t pid;
-        std::string path;
-    };
-    struct WriteOperation {
-        int order_number;
-        uint64_t pid;
-        std::string path;
-    };
-    struct ExecuteOperation {
-        int order_number;
-        uint64_t pid;
-        uint64_t child_pid;
-        std::string path;
-    };
-    struct RenameOperation {
-        int order_number;
-        uint64_t pid;
-        std::string original_path;
-        std::string new_path;
-    };
-    struct LinkOperation {
-        int order_number;
-        uint64_t pid;
-        std::string source_path;
-        std::string link_path;
-    };
-    struct SymlinkOperation {
-        int order_number;
-        uint64_t pid;
-        std::string source_path;
-        std::string symlink_path;
-    };
-    struct DeleteOperation {
-        int order_number;
-        uint64_t pid;
-        std::string path;
-    };
-
-    using OperationVariant
-        = std::variant<ProcessStart, ReadOperation, WriteOperation,
-                       ExecuteOperation, RenameOperation, LinkOperation,
-                       SymlinkOperation, DeleteOperation>;
-
-    struct ExecData {
-        uint64_t hash_id;
+    struct ExecDataDB {
+        uint64_t exec_hash_id;
+        std::vector<Event> events;
         uint64_t start_time;
         std::string path;
         std::string json;
         std::string command;
-        std::vector<OperationVariant> operations;
     };
 
     struct JobData {
         uint64_t hash_id;
         uint64_t start_time;
         uint64_t end_time;
-        std::vector<ExecData> execs;
+        std::vector<ExecDataDB> execs;
     };
 
     JobData get_job_data(const uint64_t& job_hash_id);

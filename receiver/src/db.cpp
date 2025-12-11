@@ -370,16 +370,18 @@ void DB::add_delete_operation(const uint64_t job_hash_id,
 }
 
 DB::JobData DB::get_job_data(const uint64_t& job_hash_id) {
-    sqlite3* db;
-    sqlite3_open(db_file_.c_str(), &db);
+    sqlite3* db = nullptr;
+    if (sqlite3_open(db_file_.c_str(), &db) != SQLITE_OK) {
+        return {};
+    }
     sqlite3_exec(db, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
-    DB::JobData job_data;
+    DB::JobData job_data{};
     job_data.hash_id = job_hash_id;
-    sqlite3_stmt* stmt_job;
+    sqlite3_stmt* stmt_job = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT start_time,end_time FROM jobs WHERE hash_id=?",
                        -1, &stmt_job, nullptr);
-    sqlite3_bind_int64(stmt_job, 1, job_hash_id);
+    sqlite3_bind_int64(stmt_job, 1, static_cast<sqlite3_int64>(job_hash_id));
     if (sqlite3_step(stmt_job) == SQLITE_ROW) {
         job_data.start_time
             = static_cast<uint64_t>(sqlite3_column_int64(stmt_job, 0));
@@ -387,79 +389,118 @@ DB::JobData DB::get_job_data(const uint64_t& job_hash_id) {
             = static_cast<uint64_t>(sqlite3_column_int64(stmt_job, 1));
     }
     sqlite3_finalize(stmt_job);
-    sqlite3_stmt* stmt_exec;
+    sqlite3_stmt* stmt_exec = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT hash_id,start_time,path,json,command FROM execs "
                        "WHERE job_hash_id=?",
                        -1, &stmt_exec, nullptr);
-    sqlite3_bind_int64(stmt_exec, 1, job_hash_id);
+    sqlite3_bind_int64(stmt_exec, 1, static_cast<sqlite3_int64>(job_hash_id));
     while (sqlite3_step(stmt_exec) == SQLITE_ROW) {
-        DB::ExecData exec_data;
-        exec_data.hash_id
+        DB::ExecDataDB exec{};
+        exec.exec_hash_id
             = static_cast<uint64_t>(sqlite3_column_int64(stmt_exec, 0));
-        exec_data.start_time
+        exec.start_time
             = static_cast<uint64_t>(sqlite3_column_int64(stmt_exec, 1));
-        exec_data.path = (const char*)sqlite3_column_text(stmt_exec, 2);
-        exec_data.json = (const char*)sqlite3_column_text(stmt_exec, 3);
-        exec_data.command = (const char*)sqlite3_column_text(stmt_exec, 4);
-        auto add_operations = [&](const char* table) {
-            sqlite3_stmt* stmt;
+        {
+            const unsigned char* p = sqlite3_column_text(stmt_exec, 2);
+            exec.path = p ? reinterpret_cast<const char*>(p) : std::string{};
+        }
+        {
+            const unsigned char* p = sqlite3_column_text(stmt_exec, 3);
+            exec.json = p ? reinterpret_cast<const char*>(p) : std::string{};
+        }
+        {
+            const unsigned char* p = sqlite3_column_text(stmt_exec, 4);
+            exec.command = p ? reinterpret_cast<const char*>(p) : std::string{};
+        }
+        auto add_events = [&](const char* table) {
             std::string q = std::string("SELECT * FROM ") + table
                             + " WHERE exec_hash_id=? ORDER BY order_number";
+            sqlite3_stmt* stmt = nullptr;
             sqlite3_prepare_v2(db, q.c_str(), -1, &stmt, nullptr);
-            sqlite3_bind_int64(stmt, 1, exec_data.hash_id);
+            sqlite3_bind_int64(stmt, 1,
+                               static_cast<sqlite3_int64>(exec.exec_hash_id));
+            const std::string tname(table);
             while (sqlite3_step(stmt) == SQLITE_ROW) {
-                std::string table_string = std::string(table);
-                int order_number = sqlite3_column_int64(stmt, 1);
+                int order_number
+                    = static_cast<int>(sqlite3_column_int64(stmt, 1));
                 uint64_t pid
                     = static_cast<uint64_t>(sqlite3_column_int64(stmt, 2));
-                if (table_string == "process_starts")
-                    exec_data.operations.push_back(
-                        DB::ProcessStart{order_number, pid});
-                if (table_string == "read_operations")
-                    exec_data.operations.push_back(DB::ReadOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3)});
-                if (table_string == "write_operations")
-                    exec_data.operations.push_back(DB::WriteOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3)});
-                if (table_string == "execute_operations")
-                    exec_data.operations.push_back(DB::ExecuteOperation{
-                        order_number, pid,
-                        static_cast<uint64_t>(sqlite3_column_int64(stmt, 3)),
-                        (const char*)sqlite3_column_text(stmt, 4)});
-                if (table_string == "rename_operations")
-                    exec_data.operations.push_back(DB::RenameOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3),
-                        (const char*)sqlite3_column_text(stmt, 4)});
-                if (table_string == "link_operations")
-                    exec_data.operations.push_back(DB::LinkOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3),
-                        (const char*)sqlite3_column_text(stmt, 4)});
-                if (table_string == "symlink_operations")
-                    exec_data.operations.push_back(DB::SymlinkOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3),
-                        (const char*)sqlite3_column_text(stmt, 4)});
-                if (table_string == "delete_operations")
-                    exec_data.operations.push_back(DB::DeleteOperation{
-                        order_number, pid,
-                        (const char*)sqlite3_column_text(stmt, 3)});
+                Event ev{};
+                ev.order_number = order_number;
+                ev.pid = pid;
+                if (tname == "process_starts") {
+                    ev.operation_type = OperationType::ProcessStart;
+                    ev.operation_data = ProcessStart{};
+                } else if (tname == "read_operations") {
+                    const unsigned char* c = sqlite3_column_text(stmt, 3);
+                    std::string path_in
+                        = c ? reinterpret_cast<const char*>(c) : std::string{};
+                    ev.operation_type = OperationType::Read;
+                    ev.operation_data = Read{std::move(path_in)};
+                } else if (tname == "write_operations") {
+                    const unsigned char* c = sqlite3_column_text(stmt, 3);
+                    std::string path_out
+                        = c ? reinterpret_cast<const char*>(c) : std::string{};
+                    ev.operation_type = OperationType::Write;
+                    ev.operation_data = Write{std::move(path_out)};
+                } else if (tname == "execute_operations") {
+                    uint64_t child_pid
+                        = static_cast<uint64_t>(sqlite3_column_int64(stmt, 3));
+                    const unsigned char* c = sqlite3_column_text(stmt, 4);
+                    std::string path_exec
+                        = c ? reinterpret_cast<const char*>(c) : std::string{};
+                    ev.operation_type = OperationType::Execute;
+                    ev.operation_data
+                        = Execute{std::move(path_exec), child_pid};
+                } else if (tname == "rename_operations") {
+                    const unsigned char* c1 = sqlite3_column_text(stmt, 3);
+                    const unsigned char* c2 = sqlite3_column_text(stmt, 4);
+                    std::string orig = c1 ? reinterpret_cast<const char*>(c1)
+                                          : std::string{};
+                    std::string news = c2 ? reinterpret_cast<const char*>(c2)
+                                          : std::string{};
+                    ev.operation_type = OperationType::Rename;
+                    ev.operation_data
+                        = Rename{std::move(orig), std::move(news)};
+                } else if (tname == "link_operations") {
+                    const unsigned char* c1 = sqlite3_column_text(stmt, 3);
+                    const unsigned char* c2 = sqlite3_column_text(stmt, 4);
+                    std::string src = c1 ? reinterpret_cast<const char*>(c1)
+                                         : std::string{};
+                    std::string link = c2 ? reinterpret_cast<const char*>(c2)
+                                          : std::string{};
+                    ev.operation_type = OperationType::Link;
+                    ev.operation_data = Link{std::move(src), std::move(link)};
+                } else if (tname == "symlink_operations") {
+                    const unsigned char* c1 = sqlite3_column_text(stmt, 3);
+                    const unsigned char* c2 = sqlite3_column_text(stmt, 4);
+                    std::string src = c1 ? reinterpret_cast<const char*>(c1)
+                                         : std::string{};
+                    std::string sym = c2 ? reinterpret_cast<const char*>(c2)
+                                         : std::string{};
+                    ev.operation_type = OperationType::Symlink;
+                    ev.operation_data = Symlink{std::move(src), std::move(sym)};
+                } else if (tname == "delete_operations") {
+                    const unsigned char* c = sqlite3_column_text(stmt, 3);
+                    std::string del
+                        = c ? reinterpret_cast<const char*>(c) : std::string{};
+                    ev.operation_type = OperationType::Delete;
+                    ev.operation_data = Delete{std::move(del)};
+                }
+                exec.events.push_back(std::move(ev));
             }
             sqlite3_finalize(stmt);
         };
-        add_operations("process_starts");
-        add_operations("read_operations");
-        add_operations("write_operations");
-        add_operations("execute_operations");
-        add_operations("rename_operations");
-        add_operations("link_operations");
-        add_operations("symlink_operations");
-        add_operations("delete_operations");
-        job_data.execs.push_back(std::move(exec_data));
+        add_events("process_starts");
+        add_events("read_operations");
+        add_events("write_operations");
+        add_events("execute_operations");
+        add_events("rename_operations");
+        add_events("link_operations");
+        add_events("symlink_operations");
+        add_events("delete_operations");
+        job_data.execs.push_back(std::move(exec));
     }
     sqlite3_finalize(stmt_exec);
     sqlite3_close(db);
