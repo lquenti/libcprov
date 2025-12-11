@@ -130,7 +130,6 @@ ParsedLibcprovData parse_injector_data(const std::string& request_body) {
     if (response_type == ResponseType::Error) {
         return parsed_libcprov_data;
     }
-    return parsed_libcprov_data;
     ondemand::object payload = doc["payload"].get_object().value();
     uint64_t job_hash_id = get_uint64(payload, "hash_id");
     uint64_t job_start_time = get_uint64(payload, "start_time");

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 
+#include "graphviz_builder.hpp"
 #include "model.hpp"
 #include "parser.hpp"
 
@@ -34,7 +35,11 @@ int main() {
     std::string url = "http://127.0.0.1:9000/graph_api";
     std::string body = http_post(url, payload);
     ParsedLibcprovData parsed_libcprov_data = parse_injector_data(body);
-    // build_graph(parsed_libcprov_data);
-    std::cout << "Parsed data: " << body << std::endl;
+    if (parsed_libcprov_data.response_type == ResponseType::ProvData) {
+        build_graph(parsed_libcprov_data);
+        std::cout << "Parsed data: " << body << std::endl;
+    } else if (parsed_libcprov_data.response_type == ResponseType::Error) {
+        std::cout << "Error" << std::endl;
+    }
     return 0;
 }

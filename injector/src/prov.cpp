@@ -242,7 +242,6 @@ int main(int argc, char** argv) {
                 parsed.start_opts.path, path_access, slurm_job_id,
                 slurm_cluster_name, parsed.start_opts.json);
             std::ofstream(path_access + "/start_data.txt") << start_json;
-            // send_json(endpoint_url, start_json);
             break;
         }
         case Mode::End: {
