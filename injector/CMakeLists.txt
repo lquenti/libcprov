@@ -16,6 +16,9 @@ add_executable(prov
     src/event_recorder.cpp
     src/parser.cpp
     src/processor.cpp
+    src/json_string_builders.cpp
+    src/get_job_info.cpp
+    src/goedl.cpp
 )
 
 target_include_directories(prov PRIVATE

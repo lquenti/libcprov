@@ -17,6 +17,11 @@ visualizer/CMakeCache.txt
 visualizer/cmake_install.cmake
 visualizer/Makefile
 visualizer/.cache
+model_graphs/*
+!model_graphs/
+!model_graphs/database_model.dot
+!model_graphs/component_graph.dot
+!model_graphs/example2.dot
 
 *.o
 *.so

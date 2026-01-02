@@ -1,30 +1,48 @@
 #include "processor.hpp"
 
+#include <algorithm>
 #include <cstdint>
-#include <deque>
 #include <string>
-#include <utility>
 
 #include "event_recorder.hpp"
 #include "model.hpp"
 
-ProcessedInjectorData process_events(std::deque<Event>& events) {
+void sort_events(std::vector<Event>& events) {
+    std::sort(events.begin(), events.end(),
+              [](const Event& a, const Event& b) { return a.ts < b.ts; });
+}
+
+void set_device_process_id_to_process_hash(EventRecorder& event_recorder,
+                                           const std::vector<Event>& events) {
+    for (const Event& event : events) {
+        SysOp op = event.operation;
+        if (op == SysOp::ProcessStart) {
+            const ProcessStart& process_start
+                = std::get<ProcessStart>(event.event_payload);
+            event_recorder.add_device_process_id_to_process_hash(
+                event.pid, event.slurmd_nodename, process_start.process_name,
+                process_start.env_variables);
+        }
+    }
+}
+
+ProcessedInjectorData process_events(std::vector<Event>& events) {
+    sort_events(events);
     EventRecorder event_recorder;
+    set_device_process_id_to_process_hash(event_recorder, events);
     bool first_event = true;
-    while (!events.empty()) {
-        Event event = std::move(events.front());
-        events.pop_front();
+    for (const Event& event : events) {
         uint64_t pid = event.pid;
+        std::string slurmd_nodename = event.slurmd_nodename;
         uint64_t ts = event.ts;
         SysOp op = event.operation;
         const EventPayload& payload = event.event_payload;
-        event_recorder.set_current_pid(pid);
+        event_recorder.set_current_process_hash(pid, slurmd_nodename);
         switch (op) {
             case SysOp::ProcessStart: {
-                if (first_event) {
-                    event_recorder.log_process_start();
-                    first_event = false;
-                }
+                const auto& process_start = std::get<ProcessStart>(payload);
+                event_recorder.log_process_start(process_start.process_name,
+                                                 process_start.env_variables);
                 break;
             }
             case SysOp::ProcessEnd: {
@@ -79,18 +97,19 @@ ProcessedInjectorData process_events(std::deque<Event>& events) {
             case SysOp::Exec:
             case SysOp::System: {
                 const auto& exec_event = std::get<ExecCall>(payload);
-                event_recorder.log_exec(exec_event.target, 0);
+                event_recorder.log_exec(exec_event.target, 0, "");
                 break;
             }
             case SysOp::Spawn: {
                 const auto& spawn_event = std::get<SpawnCall>(payload);
                 event_recorder.log_exec(spawn_event.target,
-                                        spawn_event.child_pid);
+                                        spawn_event.child_pid, slurmd_nodename);
                 break;
             }
             case SysOp::Fork: {
                 const auto& fork_event = std::get<ForkCall>(payload);
-                event_recorder.log_exec("", fork_event.child_pid);
+                event_recorder.log_exec("", fork_event.child_pid,
+                                        slurmd_nodename);
                 break;
             }
             default:

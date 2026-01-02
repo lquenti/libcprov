@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
-#include <variant>
 #include <vector>
 
 #include "model.hpp"
@@ -13,66 +12,41 @@ class DB {
    public:
     DB();
     void build_tables();
-    void add_process_start(const uint64_t job_hash_id,
-                           const uint64_t exec_hash_id, const int order_number,
-                           const uint64_t pid);
-    void init_job(const uint64_t& job_hash_id);
-    void finish_job(const uint64_t& job_hash_id);
-    void commit_job(const uint64_t& job_hash_id);
-    void add_job(const uint64_t job_hash_id, const uint64_t slurm_id,
-                 const std::string& cluster_name, const uint64_t start_time,
-                 const std::string& path, const std::string& json);
-    void set_job_end_time(uint64_t job_hash_id, uint64_t end_time);
-    void add_exec(const uint64_t job_hash_id, const uint64_t exec_hash_id,
-                  const uint64_t start_time, const std::string& path,
-                  const std::string& json, const std::string& command);
-    void add_read_operation(const uint64_t job_hash_id,
-                            const uint64_t exec_hash_id, const int order_number,
-                            const uint64_t pid, const std::string& path);
-    void add_write_operation(const uint64_t job_hash_id,
-                             const uint64_t exec_hash_id,
-                             const int order_number, const uint64_t pid,
-                             const std::string& path);
-    void add_execute_operation(const uint64_t job_hash_id,
-                               const uint64_t exec_hash_id,
-                               const int order_number, const uint64_t pid,
-                               const uint64_t child_pid,
-                               const std::string& path);
-    void add_rename_operation(const uint64_t job_hash_id,
-                              const uint64_t exec_hash_id,
-                              const int order_number, const uint64_t pid,
-                              const std::string& original_path,
-                              const std::string& new_path);
-    void add_link_operation(const uint64_t job_hash_id,
-                            const uint64_t exec_hash_id, const int order_number,
-                            const uint64_t pid, const std::string& source_path,
-                            const std::string& link_path);
-    void add_symlink_operation(const uint64_t job_hash_id,
-                               const uint64_t exec_hash_id,
-                               const int order_number, const uint64_t pid,
-                               const std::string& source_path,
-                               const std::string& symlink_path);
-    void add_delete_operation(const uint64_t job_hash_id,
-                              const uint64_t exec_hash_id,
-                              const int order_number, const uint64_t pid,
-                              const std::string& path);
-    struct ExecDataDB {
-        uint64_t exec_hash_id;
-        std::vector<Event> events;
-        uint64_t start_time;
+    void set_current_job(uint64_t job_id, const std::string& cluster_name);
+    void init_job(uint64_t job_id, const std::string& cluster_name);
+    void finish_job(uint64_t job_id, const std::string& cluster_name);
+    void commit_job();
+    void add_job(uint64_t job_id, const std::string& cluster_name,
+                 uint64_t start_time, const std::string& job_name,
+                 const std::string& username, const std::string& path,
+                 const std::string& json);
+    void set_job_end_time(uint64_t job_id, const std::string& cluster_name,
+                          uint64_t end_time);
+    uint64_t add_exec(uint64_t job_id, const std::string& cluster_name,
+                      uint64_t start_time, const std::string& path,
+                      const std::string& json, const std::string& command);
+    uint64_t add_process(uint64_t exec_id, const std::string& launch_command,
+                         uint64_t env_variables_hash);
+    void add_execute_mapping(uint64_t exec_id, uint64_t parent_process_id,
+                             uint64_t child_process_id);
+    void add_operations(uint64_t process_id, const std::string& path, bool read,
+                        bool write, bool deleted);
+    void add_renames(uint64_t exec_id, const std::string& original_path,
+                     const std::string& new_path);
+    void add_variable_hash_pair(uint64_t env_variables_hash,
+                                const std::string& env_variables_json);
+    /*struct JobData {
+        uint64_t slurm_id;
+        std::string cluster_name;
         std::string path;
         std::string json;
-        std::string command;
-    };
-
-    struct JobData {
-        uint64_t hash_id;
         uint64_t start_time;
         uint64_t end_time;
-        std::vector<ExecDataDB> execs;
-    };
-
-    JobData get_job_data(const uint64_t& job_hash_id);
+        std::vector<ExecData> execs;
+        EnvVariableHashPairs env_variabl_hash_pairs;
+    };*/
+    // JobData get_job_data(uint64_t slurm_id, const std::string& cluster_name);
+    JobData get_job_data(uint64_t job_id, const std::string& cluster_name);
 
    private:
     std::string db_file_;
@@ -81,14 +55,26 @@ class DB {
         sqlite3_stmt* insert_job = nullptr;
         sqlite3_stmt* update_end_time_job = nullptr;
         sqlite3_stmt* insert_exec = nullptr;
-        sqlite3_stmt* insert_process_start = nullptr;
-        sqlite3_stmt* insert_read_operations = nullptr;
-        sqlite3_stmt* insert_write_operations = nullptr;
-        sqlite3_stmt* insert_execute_operations = nullptr;
-        sqlite3_stmt* insert_rename_operations = nullptr;
-        sqlite3_stmt* insert_link_operations = nullptr;
-        sqlite3_stmt* insert_symlink_operations = nullptr;
-        sqlite3_stmt* insert_delete_operations = nullptr;
+        sqlite3_stmt* insert_process = nullptr;
+        sqlite3_stmt* insert_execute_mapping = nullptr;
+        sqlite3_stmt* insert_operations = nullptr;
+        sqlite3_stmt* insert_rename = nullptr;
+        sqlite3_stmt* insert_variable_hash_pair = nullptr;
     };
-    std::unordered_map<uint64_t, JobDBContext> active_jobs_;
+    std::unordered_map<std::string, JobDBContext> active_jobs_;
+    JobDBContext current_job_;
+    std::string col_text(sqlite3_stmt* st, int i);
+    uint64_t col_u64(sqlite3_stmt* st, int i);
+    bool col_bool(sqlite3_stmt* st, int i);
+    std::unordered_map<std::string, Operations> read_operation_map(
+        sqlite3* db, uint64_t process_id);
+    ProcessMap read_process_map(sqlite3* db, uint64_t exec_id);
+    ExecuteSetMap read_execute_set_map(sqlite3* db, uint64_t exec_id);
+    RenameMap read_rename_map(sqlite3* db, uint64_t exec_id);
+    EnvVariableHashPairs read_env_pairs_for_exec(sqlite3* db, uint64_t exec_id);
+    ExecData read_exec(sqlite3* db, uint64_t exec_id);
+    std::vector<uint64_t> get_exec_ids(sqlite3* db, uint64_t job_id,
+                                       const std::string& cluster_name);
+    uint64_t pick_exec_id(sqlite3* db, uint64_t job_id,
+                          const std::string& cluster_name);
 };

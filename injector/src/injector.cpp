@@ -1,6 +1,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/limits.h>
 #include <netdb.h>
 #include <poll.h>
 #include <pthread.h>
@@ -28,9 +29,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <mutex>
-#include <sstream>
+#include <queue>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 struct linux_dirent;
@@ -39,10 +42,47 @@ struct linux_dirent64;
 static const char* endpoint_url = "http://127.0.0.1:9000/log";
 #define LOG_STR_MAX 256
 
+extern "C" char** environ;
+
+std::queue<std::pair<std::string, std::string>> get_env_pairs_environ() {
+    const std::unordered_set<std::string> excl = {};
+    std::queue<std::pair<std::string, std::string>> out;
+    for (char** p = environ; p && *p; ++p) {
+        const char* kv = *p;
+        const char* eq = std::strchr(kv, '=');
+        if (!eq) continue;
+        std::string key(kv, eq - kv);
+        if (excl.find(key) != excl.end()) continue;
+        out.emplace(std::move(key), std::string(eq + 1));
+    }
+    return out;
+}
+
 static std::string get_env(const char* name) {
     const char* val = std::getenv(name);
     return val ? std::string(val) : std::string();
 }
+
+std::string get_full_cmd() {
+    char exe_path[PATH_MAX];
+    if (!realpath("/proc/self/exe", exe_path)) return "";
+    std::ifstream cmdline("/proc/self/cmdline");
+    if (!cmdline) return exe_path;
+    std::string cmd, arg;
+    while (std::getline(cmdline, arg, '\0')) {
+        if (!cmd.empty()) cmd += ' ';
+        cmd += arg;
+    }
+    return cmd;
+}
+
+/*
+std::string get_exec_name() {
+    std::ifstream f("/proc/self/comm");
+    std::string name = "";
+    if (f) std::getline(f, name);
+    return name;
+}*/
 // const std::string slurm_job_id = get_env("SLURM_JOB_ID");
 // const std::string slurm_cluster_name = get_env("SLURM_CLUSTER_NAME");
 static const std::string slurm_job_id = "1";
@@ -75,14 +115,19 @@ static char** build_argv_from_varargs(const char* first, va_list ap) {
     return argv;
 }
 
-static inline void add_event(const std::string& operation,
-                             const std::string& ts,
-                             const std::string& event_json) {
+static inline void add_operation(const std::string& operation,
+                                 const std::string& ts,
+                                 const std::string& event_json,
+                                 bool add_first = false) {
     std::lock_guard<std::mutex> guard(events_mutex);
     std::string event = R"({"event_header":{"operation":")" + operation
                         + R"(","ts":)" + ts + R"(},"event_data":)" + event_json
                         + "}\n";
-    aggregated_events.push_back(event);
+    if (add_first) {
+        aggregated_events.insert(aggregated_events.begin(), event);
+    } else {
+        aggregated_events.push_back(event);
+    }
 }
 
 static std::string fd_path(const int& fd) {
@@ -106,7 +151,7 @@ static void log_input_event(const std::string operation,
 
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_output_event(const std::string operation,
@@ -115,7 +160,7 @@ static void log_output_event(const std::string operation,
 
     std::string ts = now_ns();
     std::string json = R"({"path_out":")" + path_out + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_input_output_event(const std::string operation,
@@ -128,7 +173,7 @@ static void log_input_output_event(const std::string operation,
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"(","path_out":")"
                        + path_out + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_input_event_fd(const std::string operation, int path_in_fd) {
@@ -137,7 +182,7 @@ static void log_input_event_fd(const std::string operation, int path_in_fd) {
 
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_output_event_fd(const std::string operation, int path_out_fd) {
@@ -146,7 +191,7 @@ static void log_output_event_fd(const std::string operation, int path_out_fd) {
 
     std::string ts = now_ns();
     std::string json = R"({"path_out":")" + path_out + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_input_output_event_fd(const std::string operation,
@@ -161,13 +206,13 @@ static void log_input_output_event_fd(const std::string operation,
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"(","path_out":")"
                        + path_out + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_fork_event(const std::string operation, pid_t child_pid) {
     std::string ts = now_ns();
     std::string json = R"({"child_pid":)" + std::to_string(child_pid) + R"(})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_spawn_event(const std::string operation, pid_t child_pid,
@@ -177,7 +222,7 @@ static void log_spawn_event(const std::string operation, pid_t child_pid,
     std::string ts = now_ns();
     std::string json = R"({"child_pid":)" + std::to_string(child_pid)
                        + R"(,"path":")" + target + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_exec_event(const std::string operation,
@@ -186,7 +231,7 @@ static void log_exec_event(const std::string operation,
 
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_exec_fd_event(const std::string operation, int path_target_fd) {
@@ -195,7 +240,7 @@ static void log_exec_fd_event(const std::string operation, int path_target_fd) {
 
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target_string + R"("})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_exec_fail_event(const std::string operation,
@@ -205,7 +250,7 @@ static void log_exec_fail_event(const std::string operation,
     std::string ts = now_ns();
     std::string json = R"({"path":")" + target + R"(","error":)"
                        + std::to_string(err) + R"(})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_net_send_event(const std::string& operation, int sockfd,
@@ -224,7 +269,7 @@ static void log_net_send_event(const std::string& operation, int sockfd,
           + std::to_string(count)
           + (addr_str.empty() ? "" : R"(,"addr":")" + addr_str + R"(")")
           + R"(})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void log_net_recv_event(const std::string& operation, int sockfd,
@@ -243,24 +288,66 @@ static void log_net_recv_event(const std::string& operation, int sockfd,
           + std::to_string(count)
           + (addr_str.empty() ? "" : R"(,"addr":")" + addr_str + R"(")")
           + R"(})";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
+}
+
+static std::string get_env_variables_string() {
+    const std::unordered_set<std::string> exclude = {"_", "SHLVL"};
+    std::queue<std::pair<std::string, std::string>> env_variables
+        = get_env_pairs_environ();
+    std::vector<std::pair<std::string, std::string>> items;
+    items.reserve(env_variables.size());
+    size_t payload_len = 0;
+    while (!env_variables.empty()) {
+        auto [name, value] = std::move(env_variables.front());
+        env_variables.pop();
+        if (exclude.find(name) != exclude.end()) continue;
+        payload_len += 7 + name.size() + value.size();
+        items.emplace_back(std::move(name), std::move(value));
+    }
+    std::sort(items.begin(), items.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first) return a.first < b.first;
+        return a.second < b.second;
+    });
+    std::string out;
+    out.reserve(payload_len + 2 + (items.size() ? items.size() - 1 : 0));
+    out.push_back('[');
+    bool first = true;
+    for (auto& kv : items) {
+        if (!first) out.push_back(',');
+        first = false;
+        out += "{\"";
+        out += kv.first;
+        out += "\":\"";
+        out += kv.second;
+        out += "\"}";
+    }
+    out.push_back(']');
+    return out;
 }
 
 static void log_process_start() {
+    std::string ts = now_ns();
+    // std::string slurmd_nodename = get_env("SLURMD_NODENAME");
+    std::string slurmd_nodename = "node1";
     pid_t pid = getpid();
     pid_t ppid = getppid();
-    std::string ts = now_ns();
     std::string operation = "PROCESS_START";
-    std::string json = R"({"pid":)" + std::to_string(pid) + R"(,"ppid":)"
-                       + std::to_string(ppid) + R"(})";
-    add_event(operation, ts, json);
+    std::string launch_command = get_full_cmd();
+    std::string env_variables_string = get_env_variables_string();
+    std::string json = R"({"slurmd_nodename":")" + slurmd_nodename
+                       + R"(","pid":)" + std::to_string(pid) + R"(,"ppid":)"
+                       + std::to_string(ppid) + R"(,"launch_command":")"
+                       + launch_command + R"(","env_variables":)"
+                       + env_variables_string + R"(})";
+    add_operation(operation, ts, json, true);
 }
 
 static void log_process_end() {
     std::string ts = now_ns();
     std::string operation = "PROCESS_END";
     std::string json = "{}";
-    add_event(operation, ts, json);
+    add_operation(operation, ts, json);
 }
 
 static void save_events_clean() {
@@ -273,8 +360,10 @@ static void save_events_clean() {
     for (const auto& event : aggregated_events) {
         all_events.append(event.data(), event.size());
     }
-    std::string path_write = get_env("PROV_PATH_WRITE") + "/"
-                             + std::to_string(getpid()) + ".jsonl";
+    // std::string slurmd_nodename = get_env("SLURMD_NODENAME");
+    std::string slurmd_nodename = "node1";
+    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + slurmd_nodename
+                             + "_" + std::to_string(getpid()) + ".jsonl";
     int fd = syscall(SYS_open, path_write.c_str(),
                      O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd >= 0) {

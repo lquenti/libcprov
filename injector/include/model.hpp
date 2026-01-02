@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -71,11 +72,13 @@ struct SpawnCall {
 struct ForkCall {
     uint64_t child_pid = -1;
 };
-
 struct ProcessStart {
     uint64_t ppid = 0;
-    std::string step_id;
-    std::string step_name;
+    std::string process_name;
+    std::string env_variables;
+    std::string process_hash;
+    // std::string step_id;
+    // std::string step_name;
 };
 struct ProcessEnd {};
 
@@ -87,6 +90,7 @@ struct Event {
     uint64_t ts = 0;
     SysOp operation = SysOp::Unknown;
     uint64_t pid = 0;
+    std::string slurmd_nodename = "";
     EventPayload event_payload;
 };
 
@@ -100,7 +104,34 @@ struct GoedlOperations {
     std::unordered_map<std::string, OperationTable> goedl_operation_map;
 };
 
+struct EnvVariablesHashToVariables {
+    uint64_t hash;
+    std::string env_variables;
+};
+
+using ExecuteSetMap
+    = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
+
+struct Operations {
+    bool read = false;
+    bool write = false;
+    bool deleted = false;
+};
+
+struct Process {
+    std::string process_name;
+    uint64_t env_variable_hash;
+    // std::vector<std::string> process_json_operation_objects_;
+    std::unordered_map<std::string, Operations> operation_map;
+};
+using ProcessMap = std::unordered_map<uint64_t, Process>;
+struct ProcessedExecData {
+    ProcessMap process_map;
+    std::unordered_map<std::string, std::string> rename_map;
+    ExecuteSetMap execute_set_map;
+    std::unordered_map<uint64_t, std::string> env_variables_hash_to_variables;
+};
 struct ProcessedInjectorData {
     GoedlOperations goedl_operations;
-    std::vector<std::string> process_json_operation_objects;
+    ProcessedExecData processed_exec_data;
 };

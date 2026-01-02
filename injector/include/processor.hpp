@@ -2,4 +2,4 @@
 
 #include "model.hpp"
 
-ProcessedInjectorData process_events(std::deque<Event>& events);
+ProcessedInjectorData process_events(std::vector<Event>& events);

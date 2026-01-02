@@ -22,6 +22,16 @@ uint64_t get_uint64(ondemand::object& obj, const char* name) {
     return result.value();
 }
 
+std::string get_array_json(simdjson::ondemand::object& obj,
+                           const std::string_view& name) {
+    simdjson::simdjson_result<simdjson::ondemand::value> v_res
+        = obj.find_field_unordered(name);
+    simdjson::ondemand::value v = v_res.value();
+    simdjson::simdjson_result<simdjson::ondemand::json_type> t = v.type();
+    simdjson::simdjson_result<std::string_view> raw = v.raw_json();
+    return std::string(raw.value());
+}
+
 bool one_of(std::string_view t, std::string_view a) {
     return t == a;
 }
@@ -68,7 +78,8 @@ SysOp sysop_from(std::string_view t) {
     return O::Unknown;
 }
 
-Event parse_event_object(ondemand::object event_obj, uint64_t& pid) {
+Event parse_event_object(ondemand::object event_obj, uint64_t& pid,
+                         std::string& slurmd_nodename) {
     auto hdr_res = event_obj.find_field_unordered("event_header").get_object();
     auto hdr = hdr_res.value();
     uint64_t ts = get_uint64(hdr, "ts");
@@ -76,18 +87,29 @@ Event parse_event_object(ondemand::object event_obj, uint64_t& pid) {
     ondemand::object event_data{};
     auto dr = event_obj.find_field_unordered("event_data").get_object();
     event_data = dr.value();
-    Event new_event;
-    new_event.ts = ts;
-    new_event.operation = sysop_from(op);
-    new_event.pid = pid;
+    EventPayload empty_payload;
+    Event new_event = {.ts = ts,
+                       .operation = sysop_from(op),
+                       .pid = pid,
+                       .slurmd_nodename = slurmd_nodename,
+                       .event_payload = empty_payload};
     using O = SysOp;
     switch (new_event.operation) {
-        case O::ProcessStart:
-            new_event.event_payload
-                = ProcessStart{.ppid = get_uint64(event_data, "ppid")};
+        case O::ProcessStart: {
+            slurmd_nodename = get_string(event_data, "slurmd_nodename");
             pid = get_uint64(event_data, "pid");
+            uint64_t ppid = get_uint64(event_data, "ppid");
+            std::string process_name = get_string(event_data, "launch_command");
+            std::string env_variables
+                = get_array_json(event_data, "env_variables");
+            new_event.event_payload
+                = ProcessStart{.ppid = ppid,
+                               .process_name = process_name,
+                               .env_variables = env_variables};
             new_event.pid = pid;
+            new_event.slurmd_nodename = slurmd_nodename;
             break;
+        }
         case O::ProcessEnd:
             new_event.event_payload = ProcessEnd{};
             break;
@@ -139,10 +161,12 @@ std::vector<Event> parse_jsonl_file(const std::string& path,
     auto p_res = padded_string::load(path);
     padded_string p = std::move(p_res.value());
     uint64_t current_pid = 0;
+    std::string current_slurmd_nodename = "";
     auto stream_res = parser.iterate_many(p.data(), p.size(), size_t(1) << 20);
     for (auto doc : *stream_res) {
         auto obj_res = doc.get_object();
-        auto ev_opt = parse_event_object(obj_res.value(), current_pid);
+        auto ev_opt = parse_event_object(obj_res.value(), current_pid,
+                                         current_slurmd_nodename);
         events.push_back(std::move(ev_opt));
     }
     return events;

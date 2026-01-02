@@ -26,6 +26,7 @@ add_executable(libcprov_receiver
     src/db.cpp
     src/db_access.cpp
     src/parser.cpp
+    src/json_string_builders.cpp
 )
 
 target_include_directories(libcprov_receiver PRIVATE 
