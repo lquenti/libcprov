@@ -1,0 +1,115 @@
+digraph G {
+  
+graph [
+  rankdir=TB, splines=ortho, newrank=true,
+  labelloc="t", labeljust="l",
+  pad=0.2,
+  label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+      <TR>
+        <!-- Left: compact stacked details -->
+        <TD VALIGN="top">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">
+            <TR><TD ALIGN="LEFT"><B>User:  </B> Maxim</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>Start:  </B> 16:23 15.12.2025</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>End:   </B> 20:43 15.12.2025</TD></TR>
+          </TABLE>
+        </TD>
+
+        <!-- Spacer -->
+        <TD WIDTH="20"></TD>
+
+        <!-- Right: horizontal legend -->
+        <TD VALIGN="top">
+          <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
+            <TR><TD COLSPAN="8"><B>Legend</B></TD></TR>
+            <TR>
+              <TD BGCOLOR="#0072B2" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">write</TD>
+              <TD BGCOLOR="#D55E00" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">read</TD>
+              <TD BGCOLOR="#CC79A7" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">execute</TD>
+              <TD BGCOLOR="#009E73" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">delete</TD>
+            </TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >
+];
+
+  subgraph cluster_A {
+    label="fortune | cowsay";
+node [shape=ellipse, color="gray20", penwidth=2];
+subgraph cluster_process1 {
+    label="process_hash1";
+    color="#56B4E9";
+  A_n1 [label="A_n1", shape="ellipse", fontcolor="black", style=wedged, fillcolor="#D55E00:#0072B2:#CC79A7"];
+  A_n2 [label="A_n2", shape="ellipse", fontcolor="black", style=wedged, fillcolor="#D55E00:#0072B2"];
+}
+subgraph cluster_process2 {
+    label="process_hash2";
+    color="#F0E442";
+A_n3 [shape=ellipse, style=filled, fillcolor="#D55E00", color="gray20"];
+}
+    A_anchor [shape=point, width=0, label="", style=invis];
+    A_n1 -> A_n2 -> A_n3 [style=invis, constraint=true];
+    { rank=same; A_anchor; A_n2; }
+  }
+
+  subgraph cluster_B {
+    label="cowinterpret";
+    node [shape=ellipse, color="gray20", penwidth=2];
+    subgraph cluster_process1 {
+            color="#56B4E9";
+    label="process_hash1";
+    B_n1 [label="B_n1", shape="ellipse", fontcolor="black", style=wedged, fillcolor="#D55E00:#0072B2"];
+    B_n2 [shape=ellipse, style=filled, fillcolor="#D55E00", color="gray20"];
+    B_n3 [label="B_n3", shape="ellipse", fontcolor="black", style=wedged, fillcolor="#D55E00:#009E73"];
+    B_anchor [shape=point, width=0, label="", style=invis];
+    }
+    B_n1 -> B_n2 -> B_n3 [style=invis, constraint=true];
+    { rank=same; B_anchor; B_n2; }
+  }
+
+  subgraph cluster_C {
+    label="cowsender";
+        subgraph cluster_process1 {
+            color="#56B4E9";
+    label="process_hash1";
+    C_n1 [shape=ellipse, style=filled, fillcolor="#D55E00", color="gray20"];
+        }
+            subgraph cluster_process2 {
+            color="#F0E442";
+    label="process_hash2";
+    C_n2 [shape=ellipse, style=filled, fillcolor="#0072B2", color="gray20"];
+            }
+                subgraph cluster_process3 {
+            color="#56B4E9";
+    label="process_hash3";
+    C_n3 [shape=ellipse, style=filled, fillcolor="#CC79A7", color="gray20"];
+                }
+    C_anchor [shape=point, width=0, label="", style=invis];
+    C_n1 -> C_n2 -> C_n3 [style=invis, constraint=true];
+    { rank=same; C_anchor; C_n2; }
+  }
+
+  // keep clusters ordered A → B → C
+  { rank=same; A_anchor; B_anchor; C_anchor; }
+  A_anchor -> B_anchor [style=invis, weight=1000];
+  B_anchor -> C_anchor [style=invis, weight=1000];
+
+  // align rows across clusters
+  { rank=same; A_n1; B_n1; C_n1; }
+  { rank=same; A_n2; B_n2; C_n2; }
+  { rank=same; A_n3; B_n3; C_n3; }
+
+  // enforce left→right order within each row
+  A_n1 -> B_n1 -> C_n1 [style=invis, weight=1000, constraint=true];
+  A_n2 -> B_n2 -> C_n2 [style=invis, weight=1000, constraint=true];
+  A_n3 -> B_n3 -> C_n3 [style=invis, weight=1000, constraint=true];
+
+  // real connections
+  A_n1 -> B_n1 [constraint=false, color="#0072B2"]; 
+  A_n3 -> B_n3 [constraint=false, color="#D55E00"];
+  A_n2 -> C_n2 [constraint=false, color="#0072B2"];
+  B_n1 -> C_n3 [constraint=false, color="#CC79A7"];
+}

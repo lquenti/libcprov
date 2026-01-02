@@ -1,0 +1,95 @@
+digraph G {
+  rankdir=LR;
+  graph [splines=true, overlap=false, nodesep=0.35, ranksep=0.7];
+  node  [shape=none, margin=0, fontname="Helvetica"];
+  edge  [fontname="Helvetica", fontsize=10, color="#555555", penwidth=1.2];
+
+  env_variables_hash_pairs [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>env_variables_hash_pairs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>env_variables_hash</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_env_variables_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>env_variables_json</B></TD><TD>TEXT</TD><TD PORT="R_env_variables_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  jobs [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>jobs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_id</B></TD><TD>INTEGER (PK-part)</TD><TD PORT="R_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>cluster_name</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_job_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_name</B></TD><TD>TEXT</TD><TD PORT="R_job_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_username" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>username</B></TD><TD>TEXT</TD><TD PORT="R_username" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_start_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>start_time</B></TD><TD>INTEGER</TD><TD PORT="R_start_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_end_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>end_time</B></TD><TD>INTEGER</TD><TD PORT="R_end_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>path</B></TD><TD>TEXT</TD><TD PORT="R_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>json</B></TD><TD>TEXT</TD><TD PORT="R_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  execs [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>execs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_id</B></TD><TD>INTEGER (FK-part)</TD><TD PORT="R_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>cluster_name</B></TD><TD>TEXT (FK-part)</TD><TD PORT="R_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_start_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>start_time</B></TD><TD>INTEGER</TD><TD PORT="R_start_time" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>path</B></TD><TD>TEXT</TD><TD PORT="R_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>json</B></TD><TD>TEXT</TD><TD PORT="R_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>command</B></TD><TD>TEXT</TD><TD PORT="R_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  processes [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>processes</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>process_id</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_launch_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>launch_command</B></TD><TD>TEXT</TD><TD PORT="R_launch_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>env_variables_hash</B></TD><TD>INTEGER (FK)</TD><TD PORT="R_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  execute_mappings [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>execute_mappings</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_parent_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>parent_process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_parent_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_child_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>child_process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_child_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  operations [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>operations</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_read" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>read</B></TD><TD>INTEGER</TD><TD PORT="R_read" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_write" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>write</B></TD><TD>INTEGER</TD><TD PORT="R_write" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_deleted" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>deleted</B></TD><TD>INTEGER</TD><TD PORT="R_deleted" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  renames [ label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>renames</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_original_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>original_path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_original_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD PORT="L_new_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>new_path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_new_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+    </TABLE>
+  > ];
+
+  // --- edges (no arrow labels)
+  execs:R_job_id -> jobs:L_job_id;
+  execs:R_cluster_name -> jobs:L_cluster_name;
+
+  processes:R_exec_id -> execs:L_exec_id;
+  processes:R_env_variables_hash -> env_variables_hash_pairs:L_env_variables_hash;
+
+  execute_mappings:R_exec_id -> execs:L_exec_id;
+  execute_mappings:R_parent_process_id -> processes:L_process_id;
+  execute_mappings:R_child_process_id -> processes:L_process_id;
+
+  operations:R_process_id -> processes:L_process_id;
+
+  renames:R_exec_id -> execs:L_exec_id;
+}

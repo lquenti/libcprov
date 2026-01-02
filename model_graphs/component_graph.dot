@@ -1,0 +1,25 @@
+digraph G {
+
+  user -> sbatch  [label="1"];
+  sbatch -> prov [label="2"];
+  prov -> injector [label="3"];
+  injector -> slurm_job [label="4"];
+  slurm_job -> injector [label="5"];
+  injector -> devshm [label="6"];
+  prov -> devshm [label="7"];
+  prov -> goedl [label="8"];
+  goedl -> cold_storage [label="a_14"];
+  prov -> receiver [label="10"];
+  receiver -> database [label=" 11"];
+  prov -> user [label="12"];
+  user -> goedl [label="  a_13  "];
+  goedl -> user [label="  a_16"];
+  user -> visualizer [label="  b_13"];
+  goedl -> cold_storage [label="  9"]
+  cold_storage -> goedl [label="  a_15"]
+  visualizer -> receiver [label="b_14"];
+  receiver -> database [label="  b_15"];
+  database -> receiver [label="  b_16"];
+  receiver -> visualizer [label="b_17"];
+  visualizer -> user [label="  b_18"];
+}
