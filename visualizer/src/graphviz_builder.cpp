@@ -99,7 +99,6 @@ static std::string process_table_label(
           "COLOR=\"#ffffff\"><B>"
        << html_escape(title) << "</B></FONT></TD></TR>";
     for (const auto& [path, op] : ops) {
-        if (path.rfind("pipe:[", 0) == 0) continue;
         os << "<TR><TD ALIGN=\"LEFT\" BGCOLOR=\"" << row_color_for_ops(op)
            << "\"><FONT COLOR=\"#000000\">" << html_escape(path)
            << "</FONT></TD></TR>";
