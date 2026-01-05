@@ -5,9 +5,9 @@
 #include <iostream>
 #include <string>
 
-#include "graphviz_builder.hpp"
 #include "model.hpp"
 #include "parser.hpp"
+#include "svg_graph.hpp"
 
 static size_t append_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* s = static_cast<std::string*>(userdata);

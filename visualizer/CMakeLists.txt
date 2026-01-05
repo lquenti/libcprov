@@ -13,7 +13,7 @@ find_library(SIMDJSON_LIB simdjson REQUIRED)
 add_executable(libcprov_visualizer
     src/main.cpp
     src/parser.cpp
-    src/graphviz_builder.cpp
+    src/svg_graph.cpp
 )
 
 target_include_directories(libcprov_visualizer PRIVATE 
