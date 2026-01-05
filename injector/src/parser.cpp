@@ -39,6 +39,7 @@ template <class... Ss>
 bool one_of(std::string_view t, std::string_view a, Ss... s) {
     return (t == a) || one_of(t, s...);
 }
+
 SysOp sysop_from(std::string_view t) {
     using O = SysOp;
     if (one_of(t, "WRITE", "FWRITE", "DPRINTF", "FPUTS", "FPRINTF", "VFPRINTF",
@@ -47,10 +48,11 @@ SysOp sysop_from(std::string_view t) {
     if (one_of(t, "WRITEV", "PWRITEV", "PWRITEV2")) return O::Writev;
     if (one_of(t, "PWRITE", "PWRITE64")) return O::Pwrite;
     if (one_of(t, "TRUNCATE", "FTRUNCATE")) return O::Truncate;
-    if (one_of(t, "MSYNC")) return O::Msync;
-    if (one_of(t, "READ")) return O::Read;
-    if (one_of(t, "READV", "PREADV", "PREADV2")) return O::Readv;
-    if (one_of(t, "PREAD", "PREAD64")) return O::Pread;
+    if (one_of(t, "MSYNC", "MPROTECT", "MADVISE", "MINCORE")) return O::Msync;
+    if (one_of(t, "READ", "READV", "PREAD", "PREAD64", "PREADV", "PREADV2",
+               "FGETS", "FREAD", "FGETC", "GETC", "GETCHAR", "FSCANF", "SCANF",
+               "SSCANF", "VSSCANF"))
+        return O::Read;
     if (one_of(t, "GETDENTS", "GETDENTS64")) return O::Getdents;
     if (one_of(t, "COPY_FILE_RANGE", "SENDFILE", "SENDFILE64", "SPLICE"))
         return O::Transfer;
@@ -75,6 +77,9 @@ SysOp sysop_from(std::string_view t) {
     if (one_of(t, "FORK", "VFORK", "CLONE")) return O::Fork;
     if (one_of(t, "PROCESS_START")) return O::ProcessStart;
     if (one_of(t, "PROCESS_END")) return O::ProcessEnd;
+    if (one_of(t, "ACCESS", "STAT", "LSTAT", "FSTAT", "CHMOD", "CHOWN",
+               "UTIME"))
+        return O::Open;
     return O::Unknown;
 }
 

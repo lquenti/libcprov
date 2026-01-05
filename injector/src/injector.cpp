@@ -767,6 +767,102 @@ int getdents64(unsigned int fd, struct linux_dirent64* dirp,
     RESTORE_ERRNO;
     return ret;
 }
+size_t fread(void* ptr, size_t size, size_t nmemb, FILE* stream) {
+    static auto real_fread = (size_t (*)(void*, size_t, size_t, FILE*)) nullptr;
+    RESOLVE_REAL(real_fread, "__libc_fread", "fread", (size_t)0);
+    size_t ret = real_fread(ptr, size, nmemb, stream);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_input_event_fd("FREAD", fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+char* fgets(char* s, int size, FILE* stream) {
+    static auto real_fgets = (char* (*)(char*, int, FILE*)) nullptr;
+    RESOLVE_REAL(real_fgets, "__libc_fgets", "fgets", NULL);
+    char* ret = real_fgets(s, size, stream);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_input_event_fd("FGETS", fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+int fgetc(FILE* stream) {
+    static auto real_fgetc = (int (*)(FILE*)) nullptr;
+    RESOLVE_REAL(real_fgetc, "__libc_fgetc", "fgetc", EOF);
+    int ret = real_fgetc(stream);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_input_event_fd("FGETC", fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+int getc(FILE* stream) {
+    static auto real_getc = (int (*)(FILE*)) nullptr;
+    RESOLVE_REAL(real_getc, "__libc_getc", "getc", EOF);
+    int ret = real_getc(stream);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_input_event_fd("GETC", fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+int getchar(void) {
+    static auto real_getchar = (int (*)(void)) nullptr;
+    RESOLVE_REAL(real_getchar, "__libc_getchar", "getchar", EOF);
+    int ret = real_getchar();
+    SAVE_ERRNO;
+    log_input_event("GETCHAR", "");
+    RESTORE_ERRNO;
+    return ret;
+}
+int fscanf(FILE* stream, const char* format, ...) {
+    static auto real_fscanf = (int (*)(FILE*, const char*, ...)) nullptr;
+    RESOLVE_REAL(real_fscanf, "__libc_fscanf", "fscanf", -1);
+    va_list ap;
+    va_start(ap, format);
+    int ret = real_fscanf(stream, format, ap);
+    va_end(ap);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_input_event_fd("FSCANF", fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+int scanf(const char* format, ...) {
+    static auto real_scanf = (int (*)(const char*, ...)) nullptr;
+    RESOLVE_REAL(real_scanf, "__libc_scanf", "scanf", -1);
+    va_list ap;
+    va_start(ap, format);
+    int ret = real_scanf(format, ap);
+    va_end(ap);
+    SAVE_ERRNO;
+    log_input_event("SCANF", "");
+    RESTORE_ERRNO;
+    return ret;
+}
+int sscanf(const char* s, const char* format, ...) {
+    static auto real_sscanf = (int (*)(const char*, const char*, ...)) nullptr;
+    RESOLVE_REAL(real_sscanf, "__libc_sscanf", "sscanf", -1);
+    va_list ap;
+    va_start(ap, format);
+    int ret = real_sscanf(s, format, ap);
+    va_end(ap);
+    SAVE_ERRNO;
+    log_input_event("SSCANF", "");
+    RESTORE_ERRNO;
+    return ret;
+}
+int vsscanf(const char* s, const char* format, va_list ap) {
+    static auto real_vsscanf
+        = (int (*)(const char*, const char*, va_list)) nullptr;
+    RESOLVE_REAL(real_vsscanf, "__libc_vsscanf", "vsscanf", -1);
+    int ret = real_vsscanf(s, format, ap);
+    SAVE_ERRNO;
+    log_input_event("VSSCANF", "");
+    RESTORE_ERRNO;
+    return ret;
+}
 // --------------------- EXEC HOOKS -----------------------
 int execve(const char* pathname, char* const argv[], char* const envp[]) {
     static auto real_execve
@@ -1198,6 +1294,33 @@ int msync(void* addr, size_t length, int flags) {
     RESTORE_ERRNO;
     return rc;
 }
+int mprotect(void* addr, size_t len, int prot) {
+    static auto real_mprotect = (int (*)(void*, size_t, int)) nullptr;
+    RESOLVE_REAL(real_mprotect, "__libc_mprotect", "mprotect", -1);
+    int rc = real_mprotect(addr, len, prot);
+    SAVE_ERRNO;
+    log_output_event("MPROTECT", "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int madvise(void* addr, size_t len, int advice) {
+    static auto real_madvise = (int (*)(void*, size_t, int)) nullptr;
+    RESOLVE_REAL(real_madvise, "__libc_madvise", "madvise", -1);
+    int rc = real_madvise(addr, len, advice);
+    SAVE_ERRNO;
+    log_output_event("MADVISE", "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int mincore(void* addr, size_t len, unsigned char* vec) {
+    static auto real_mincore = (int (*)(void*, size_t, unsigned char*)) nullptr;
+    RESOLVE_REAL(real_mincore, "__libc_mincore", "mincore", -1);
+    int rc = real_mincore(addr, len, vec);
+    SAVE_ERRNO;
+    log_output_event("MINCORE", "");
+    RESTORE_ERRNO;
+    return rc;
+}
 // ------------------- SIZE/SPACE METADATA HOOKS ----------------
 int ftruncate(int fd, off_t length) {
     static auto real_ftruncate = (int (*)(int, off_t)) nullptr;
@@ -1341,6 +1464,43 @@ int sem_unlink(const char* name) {
     int rc = real_sem_unlink(name);
     SAVE_ERRNO;
     log_input_event("SEM_UNLINK", name ? name : "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int access(const char* path, int amode) {
+    static auto real_access = (int (*)(const char*, int)) nullptr;
+    RESOLVE_REAL(real_access, "__libc_access", "access", -1);
+    int rc = real_access(path, amode);
+    SAVE_ERRNO;
+    log_input_event("ACCESS", path ? path : "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int chmod(const char* path, mode_t mode) {
+    static auto real_chmod = (int (*)(const char*, mode_t)) nullptr;
+    RESOLVE_REAL(real_chmod, "__libc_chmod", "chmod", -1);
+    int rc = real_chmod(path, mode);
+    SAVE_ERRNO;
+    log_output_event("CHMOD", path ? path : "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int chown(const char* path, uid_t owner, gid_t group) {
+    static auto real_chown = (int (*)(const char*, uid_t, gid_t)) nullptr;
+    RESOLVE_REAL(real_chown, "__libc_chown", "chown", -1);
+    int rc = real_chown(path, owner, group);
+    SAVE_ERRNO;
+    log_output_event("CHOWN", path ? path : "");
+    RESTORE_ERRNO;
+    return rc;
+}
+int utime(const char* path, const struct utimbuf* times) {
+    static auto real_utime
+        = (int (*)(const char*, const struct utimbuf*)) nullptr;
+    RESOLVE_REAL(real_utime, "__libc_utime", "utime", -1);
+    int rc = real_utime(path, times);
+    SAVE_ERRNO;
+    log_output_event("UTIME", path ? path : "");
     RESTORE_ERRNO;
     return rc;
 }
