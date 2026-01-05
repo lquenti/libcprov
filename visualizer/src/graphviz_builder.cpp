@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "model.hpp"
-
 std::string dot_escape_label(const std::string& s) {
     std::string out;
     out.reserve(s.size());
@@ -21,7 +20,6 @@ std::string dot_escape_label(const std::string& s) {
     }
     return out;
 }
-
 std::string html_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
@@ -41,14 +39,12 @@ std::string html_escape(const std::string& s) {
     }
     return out;
 }
-
 std::string row_color_for_ops(const Operations& ops) {
     if (ops.write) return "#0072B2";
     if (ops.read) return "#D55E00";
     if (ops.deleted) return "#009E73";
     return "#ffffff";
 }
-
 std::vector<const ExecData*> sorted_execs(const JobData& job) {
     std::vector<const ExecData*> v;
     v.reserve(job.execs.size());
@@ -60,7 +56,6 @@ std::vector<const ExecData*> sorted_execs(const JobData& job) {
     });
     return v;
 }
-
 std::vector<std::pair<uint64_t, const Process*>> sorted_processes(
     const ExecData& exec) {
     std::vector<std::pair<uint64_t, const Process*>> v;
@@ -70,7 +65,6 @@ std::vector<std::pair<uint64_t, const Process*>> sorted_processes(
               [](auto& a, auto& b) { return a.first < b.first; });
     return v;
 }
-
 std::vector<std::pair<std::string, Operations>> sorted_operations(
     const Process& p) {
     std::vector<std::pair<std::string, Operations>> v;
@@ -80,15 +74,15 @@ std::vector<std::pair<std::string, Operations>> sorted_operations(
               [](auto& a, auto& b) { return a.first < b.first; });
     return v;
 }
-
 std::string exec_prefix(size_t idx) {
     return std::string(1, char('A' + (idx % 26)));
 }
-
 static std::string proc_node_id(const std::string& epref, size_t pidx1) {
     return epref + "_proc" + std::to_string(pidx1);
 }
-
+static std::string anchor_node_id(const std::string& epref) {
+    return epref + "_anchor";
+}
 static std::string process_table_label(
     const std::string& title,
     const std::vector<std::pair<std::string, Operations>>& ops) {
@@ -106,36 +100,40 @@ static std::string process_table_label(
     os << "</TABLE>";
     return os.str();
 }
-
 std::string build_graph_header(const std::string& job_name,
                                const std::string& username, uint64_t start_time,
                                uint64_t end_time) {
     std::ostringstream os;
-    os << R"(graph [rankdir=TB,splines=ortho,newrank=true,labelloc="t",labeljust="l",pad=0.2,label=<)";
+    os << R"(graph [rankdir=TB,splines=ortho,newrank=true,labelloc="t",)";
+    os << R"(labeljust="l",pad=0.2,label=<)";
     os << R"(<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0"><TR>)";
-    os << R"(<TD VALIGN="top"><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">)";
-    os << R"(<TR><TD ALIGN="LEFT"><B>Job Name:  </B> )" << html_escape(job_name)
-       << R"(</TD></TR>)";
-    os << R"(<TR><TD ALIGN="LEFT"><B>User:  </B> )" << html_escape(username)
-       << R"(</TD></TR>)";
-    os << R"(<TR><TD ALIGN="LEFT"><B>Start:  </B> )" << start_time
-       << R"(</TD></TR>)";
-    os << R"(<TR><TD ALIGN="LEFT"><B>End:   </B> )" << end_time
-       << R"(</TD></TR>)";
+    os << R"(<TD VALIGN="top"><TABLE BORDER="0" CELLBORDER="0")";
+    os << R"( CELLSPACING="0" CELLPADDING="0">)";
+    os << R"(<TR><TD ALIGN="LEFT"><B>Job Name:  </B> )";
+    os << html_escape(job_name) << R"(</TD></TR>)";
+    os << R"(<TR><TD ALIGN="LEFT"><B>User:  </B> )";
+    os << html_escape(username) << R"(</TD></TR>)";
+    os << R"(<TR><TD ALIGN="LEFT"><B>Start:  </B> )";
+    os << start_time << R"(</TD></TR>)";
+    os << R"(<TR><TD ALIGN="LEFT"><B>End:   </B> )";
+    os << end_time << R"(</TD></TR>)";
     os << R"(</TABLE></TD>)";
     os << R"(<TD WIDTH="20"></TD>)";
-    os << R"(<TD VALIGN="top"><TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">)";
+    os << R"(<TD VALIGN="top"><TABLE BORDER="0" CELLBORDER="1")";
+    os << R"( CELLSPACING="0" CELLPADDING="4">)";
     os << R"(<TR><TD COLSPAN="6"><B>Legend</B></TD></TR>)";
     os << R"(<TR>)";
-    os << R"(<TD BGCOLOR="#0072B2" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">write</TD>)";
-    os << R"(<TD BGCOLOR="#D55E00" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">read</TD>)";
-    os << R"(<TD BGCOLOR="#009E73" WIDTH="14" HEIGHT="14"></TD><TD ALIGN="LEFT">delete</TD>)";
+    os << R"(<TD BGCOLOR="#0072B2" WIDTH="14" HEIGHT="14"></TD>)";
+    os << R"(<TD ALIGN="LEFT">write</TD>)";
+    os << R"(<TD BGCOLOR="#D55E00" WIDTH="14" HEIGHT="14"></TD>)";
+    os << R"(<TD ALIGN="LEFT">read</TD>)";
+    os << R"(<TD BGCOLOR="#009E73" WIDTH="14" HEIGHT="14"></TD>)";
+    os << R"(<TD ALIGN="LEFT">delete</TD>)";
     os << R"(</TR></TABLE></TD>)";
     os << R"(</TR></TABLE>)";
     os << R"(>];)";
     return os.str();
 }
-
 std::string build_graph_dot(const JobData& job_data) {
     std::ostringstream os;
     os << "digraph G{\n";
@@ -146,11 +144,17 @@ std::string build_graph_dot(const JobData& job_data) {
     os << "edge[color=\"gray60\",penwidth=1.4,arrowsize=0.8,fontcolor="
           "\"gray80\"];\n";
     auto execs = sorted_execs(job_data);
+    std::vector<std::string> anchors;
+    anchors.reserve(execs.size());
     for (size_t ei = 0; ei < execs.size(); ++ei) {
         const ExecData& ex = *execs[ei];
         std::string ep = exec_prefix(ei);
+        std::string anchor = anchor_node_id(ep);
+        anchors.push_back(anchor);
         os << "subgraph cluster_" << ep << "{label=\""
            << dot_escape_label(ex.command) << "\";\n";
+        os << anchor
+           << "[shape=point,width=0,height=0,label=\"\",style=invis];\n";
         auto procs = sorted_processes(ex);
         size_t pcount = procs.size();
         std::unordered_map<std::string, size_t> cmd_to_idx;
@@ -161,6 +165,10 @@ std::string build_graph_dot(const JobData& job_data) {
             auto ops = sorted_operations(proc);
             os << proc_node_id(ep, pidx1) << "[label=<"
                << process_table_label(proc.process_command, ops) << ">];\n";
+        }
+        if (pcount >= 1) {
+            os << anchor << "->" << proc_node_id(ep, 1)
+               << "[style=invis,weight=1000];\n";
         }
         if (pcount >= 2) {
             os << proc_node_id(ep, 1);
@@ -188,17 +196,20 @@ std::string build_graph_dot(const JobData& job_data) {
         }
         os << "}\n";
     }
+    if (anchors.size() >= 2) {
+        os << "{rank=same;";
+        for (const auto& a : anchors) os << a << ";";
+        os << "}\n";
+    }
     os << "}\n";
     return os.str();
 }
-
 void save_graph_to_file(const std::string& graph_string,
                         const std::string& filename) {
     std::ofstream out(filename);
     out << graph_string;
     out.close();
 }
-
 void build_graph(const JobData& job_data) {
     save_graph_to_file(build_graph_dot(job_data),
                        "/dev/shm/libcprov/graphviz.dot");
