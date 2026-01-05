@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <db.hpp>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -9,7 +10,9 @@
 #include "model.hpp"
 
 DB::DB() {
-    db_file_ = "/dev/shm/libcprov/libcprov.db";
+    std::string base_path = "/dev/shm/libcprov";
+    std::filesystem::create_directories(base_path);
+    db_file_ = (base_path + "/libcprov.db").c_str();
 }
 
 void DB::build_tables() {

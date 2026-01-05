@@ -17,6 +17,8 @@ visualizer/CMakeCache.txt
 visualizer/cmake_install.cmake
 visualizer/Makefile
 visualizer/.cache
+test_scripts/first_exec
+test_scripts/second_exec
 model_graphs/*
 !model_graphs/
 !model_graphs/database_model.dot

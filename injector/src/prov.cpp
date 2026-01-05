@@ -5,9 +5,11 @@
 #include <xxhash.h>
 
 #include <CLI/CLI.hpp>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 #include "get_job_info.hpp"
 #include "goedl.hpp"
