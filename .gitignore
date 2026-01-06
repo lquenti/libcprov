@@ -18,6 +18,7 @@ visualizer/cmake_install.cmake
 visualizer/Makefile
 visualizer/.cache
 test_scripts/first_exec
+test_scripts/first_exec_child1
 test_scripts/second_exec
 model_graphs/*
 !model_graphs/

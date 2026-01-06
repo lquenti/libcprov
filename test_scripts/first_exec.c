@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define BASE_PATH "/dev/shm"
@@ -19,5 +20,18 @@ int main() {
     snprintf(filename, sizeof filename, "%s/file1.txt", BASE_PATH);
     if (unlink(filename) != 0) perror("unlink");
     printf("10 files created in %s\n", BASE_PATH);
+    pid_t pid = fork();
+    if (pid == 0) {
+        execl("./test_scripts/first_exec_child1", "first_exec_child1",
+              (char*)NULL);
+        perror("execl");
+        _exit(127);
+    } else if (pid < 0) {
+        perror("fork");
+        return 1;
+    } else {
+        int status;
+        waitpid(pid, &status, 0);
+    }
     return 0;
 }

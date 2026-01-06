@@ -223,18 +223,6 @@ uint64_t DB::add_exec(uint64_t job_id, const std::string& cluster_name,
     sqlite3_reset(current_job_.insert_exec);
     return exec_id;
 }
-/*uint64_t DB::add_process(uint64_t exec_id, const std::string& launch_command,
-                         uint64_t env_variables_hash) {
-    sqlite3_bind_int64(current_job_.insert_process, 1, exec_id);
-    sqlite3_bind_text(current_job_.insert_process, 2, launch_command.c_str(),
-                      -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int64(current_job_.insert_process, 3, env_variables_hash);
-    sqlite3_step(current_job_.insert_process);
-    uint64_t process_id
-        = static_cast<uint64_t>(sqlite3_last_insert_rowid(current_job_.db));
-    sqlite3_reset(current_job_.insert_process);
-    return process_id;
-}*/
 uint64_t DB::add_process(uint64_t exec_id, const std::string& launch_command,
                          uint64_t env_variables_hash) {
     sqlite3_bind_int64(current_job_.insert_process, 1, exec_id);
