@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "model.hpp"
-
 static std::string xml_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
@@ -41,7 +40,6 @@ static std::string xml_escape(const std::string& s) {
     }
     return out;
 }
-
 static std::vector<const ExecData*> sorted_execs(const JobData& job) {
     std::vector<const ExecData*> v;
     v.reserve(job.execs.size());
@@ -53,7 +51,6 @@ static std::vector<const ExecData*> sorted_execs(const JobData& job) {
     });
     return v;
 }
-
 static std::vector<std::pair<uint64_t, const Process*>> sorted_processes(
     const ExecData& exec) {
     std::vector<std::pair<uint64_t, const Process*>> v;
@@ -63,7 +60,6 @@ static std::vector<std::pair<uint64_t, const Process*>> sorted_processes(
               [](auto& a, auto& b) { return a.first < b.first; });
     return v;
 }
-
 static std::vector<std::pair<std::string, Operations>> sorted_operations(
     const Process& p) {
     std::vector<std::pair<std::string, Operations>> v;
@@ -73,7 +69,6 @@ static std::vector<std::pair<std::string, Operations>> sorted_operations(
               [](auto& a, auto& b) { return a.first < b.first; });
     return v;
 }
-
 struct SvgStyle {
     double page_pad = 18.0;
     double header_h = 88.0;
@@ -93,16 +88,16 @@ struct SvgStyle {
     std::string box_stroke = "#333333";
     std::string proc_title_bg = "#20262e";
     std::string proc_title_fg = "#ffffff";
+    std::string shared_header_bg = "#CC79A7";
+    std::string shared_header_fg = "#ffffff";
+    std::string shared_border = "#CC79A7";
 };
-
 static double clamp(double x, double lo, double hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
-
 static double estimate_text_w(const std::string& s, double cw) {
     return (double)s.size() * cw;
 }
-
 static double measure_process_width(const Process& p, const SvgStyle& st) {
     double w = 0.0;
     w = std::max(w, estimate_text_w(p.process_command, st.char_w));
@@ -113,7 +108,6 @@ static double measure_process_width(const Process& p, const SvgStyle& st) {
     w += 24.0;
     return clamp(w, st.proc_min_w, st.proc_max_w);
 }
-
 static double measure_exec_width(const ExecData& ex, const SvgStyle& st) {
     double w = estimate_text_w(ex.command, st.char_w) + 28.0;
     auto procs = sorted_processes(ex);
@@ -123,11 +117,9 @@ static double measure_exec_width(const ExecData& ex, const SvgStyle& st) {
     }
     return w;
 }
-
 static double measure_process_height(const Process& p, const SvgStyle& st) {
     return st.process_title_h + (double)p.operation_map.size() * st.row_h;
 }
-
 static double measure_exec_height(const ExecData& ex, const SvgStyle& st) {
     auto procs = sorted_processes(ex);
     double h = 0.0;
@@ -137,7 +129,6 @@ static double measure_exec_height(const ExecData& ex, const SvgStyle& st) {
     }
     return h;
 }
-
 static void svg_rect(std::ostringstream& os, double x, double y, double w,
                      double h, const std::string& fill,
                      const std::string& stroke, double sw) {
@@ -145,7 +136,6 @@ static void svg_rect(std::ostringstream& os, double x, double y, double w,
        << "\" height=\"" << h << "\" fill=\"" << fill << "\" stroke=\""
        << stroke << "\" stroke-width=\"" << sw << "\" />\n";
 }
-
 static void svg_text(std::ostringstream& os, double x, double y,
                      const std::string& text, const std::string& fill,
                      double font_size, const std::string& font_family,
@@ -155,7 +145,6 @@ static void svg_text(std::ostringstream& os, double x, double y,
        << "\" font-weight=\"" << weight << "\">" << xml_escape(text)
        << "</text>\n";
 }
-
 static std::vector<std::string> row_colors_for_ops(const Operations& ops) {
     std::vector<std::string> cs;
     if (ops.write) cs.push_back("#0072B2");
@@ -164,7 +153,6 @@ static std::vector<std::string> row_colors_for_ops(const Operations& ops) {
     if (cs.empty()) cs.push_back("#ffffff");
     return cs;
 }
-
 static void svg_row_bg(std::ostringstream& os, double x, double y, double w,
                        double h, const Operations& ops,
                        const std::string& stroke, double sw) {
@@ -181,7 +169,6 @@ static void svg_row_bg(std::ostringstream& os, double x, double y, double w,
        << "\" height=\"" << h << "\" fill=\"none\" stroke=\"" << stroke
        << "\" stroke-width=\"" << sw << "\" />\n";
 }
-
 static void draw_process(std::ostringstream& os, double x, double y, double w,
                          const Process& p, const SvgStyle& st) {
     double h = measure_process_height(p, st);
@@ -199,7 +186,98 @@ static void draw_process(std::ostringstream& os, double x, double y, double w,
         cy += st.row_h;
     }
 }
-
+static std::string access_color_for_process_on_path(const Process& p,
+                                                    const std::string& path) {
+    auto it = p.operation_map.find(path);
+    if (it == p.operation_map.end()) return "#ffffff";
+    const Operations& ops = it->second;
+    if (ops.write) return "#0072B2";
+    if (ops.read) return "#D55E00";
+    if (ops.deleted) return "#009E73";
+    return "#ffffff";
+}
+struct SharedEntry {
+    std::string proc;
+    std::string color;
+};
+static std::vector<std::pair<std::string, std::vector<SharedEntry>>>
+compute_shared_tables(const ExecData& ex) {
+    auto procs = sorted_processes(ex);
+    std::unordered_map<std::string, std::vector<size_t>> path_to_proc_idxs;
+    path_to_proc_idxs.reserve(256);
+    for (size_t i = 0; i < procs.size(); ++i) {
+        const Process& p = *procs[i].second;
+        for (const auto& [path, ops] : p.operation_map) {
+            (void)ops;
+            path_to_proc_idxs[path].push_back(i);
+        }
+    }
+    std::vector<std::pair<std::string, std::vector<SharedEntry>>> tables;
+    tables.reserve(path_to_proc_idxs.size());
+    for (auto& kv : path_to_proc_idxs) {
+        auto& path = kv.first;
+        auto& idxs = kv.second;
+        std::sort(idxs.begin(), idxs.end());
+        idxs.erase(std::unique(idxs.begin(), idxs.end()), idxs.end());
+        if (idxs.size() < 2) continue;
+        std::vector<SharedEntry> entries;
+        entries.reserve(idxs.size());
+        for (size_t idx : idxs) {
+            const Process& p = *procs[idx].second;
+            SharedEntry e;
+            e.proc = p.process_command;
+            e.color = access_color_for_process_on_path(p, path);
+            entries.push_back(std::move(e));
+        }
+        tables.push_back({path, std::move(entries)});
+    }
+    std::sort(tables.begin(), tables.end(),
+              [](auto& a, auto& b) { return a.first < b.first; });
+    return tables;
+}
+static double measure_shared_tables_height(const ExecData& ex,
+                                           const SvgStyle& st) {
+    auto tables = compute_shared_tables(ex);
+    if (tables.empty()) return 0.0;
+    double h = 0.0;
+    for (size_t i = 0; i < tables.size(); ++i) {
+        h += st.process_title_h;
+        h += (double)tables[i].second.size() * st.row_h;
+        if (i + 1 < tables.size()) h += st.row_gap;
+    }
+    h += st.row_gap;
+    return h;
+}
+static void draw_shared_table(std::ostringstream& os, double x, double y,
+                              double w, const std::string& path,
+                              const std::vector<SharedEntry>& entries,
+                              const SvgStyle& st) {
+    double h = st.process_title_h + (double)entries.size() * st.row_h;
+    svg_rect(os, x, y, w, h, "none", st.shared_border, st.box_border);
+    svg_rect(os, x, y, w, st.process_title_h, st.shared_header_bg,
+             st.shared_border, st.box_border);
+    svg_text(os, x + 8, y + 18, path, st.shared_header_fg, st.font_size,
+             "Helvetica", "bold");
+    double cy = y + st.process_title_h;
+    for (const auto& e : entries) {
+        svg_rect(os, x, cy, w, st.row_h, e.color, st.shared_border,
+                 st.box_border);
+        svg_text(os, x + 8, cy + 14, e.proc, "#000000", st.mono_font_size,
+                 "monospace");
+        cy += st.row_h;
+    }
+}
+static void draw_shared_tables(std::ostringstream& os, double x, double y,
+                               double w, const ExecData& ex,
+                               const SvgStyle& st) {
+    auto tables = compute_shared_tables(ex);
+    double cy = y;
+    for (size_t i = 0; i < tables.size(); ++i) {
+        draw_shared_table(os, x, cy, w, tables[i].first, tables[i].second, st);
+        cy += st.process_title_h + (double)tables[i].second.size() * st.row_h;
+        if (i + 1 < tables.size()) cy += st.row_gap;
+    }
+}
 static void draw_exec_column(std::ostringstream& os, double x, double top_y,
                              double w, double h, const ExecData& ex,
                              const SvgStyle& st) {
@@ -215,15 +293,21 @@ static void draw_exec_column(std::ostringstream& os, double x, double top_y,
         cy += measure_process_height(p, st);
         if (i + 1 < procs.size()) cy += st.row_gap;
     }
+    double shared_h = measure_shared_tables_height(ex, st);
+    if (shared_h > 0.0) {
+        cy += st.row_gap;
+        double tw = w - 20.0;
+        draw_shared_tables(os, x + 10.0, cy, tw, ex, st);
+    }
 }
-
 static std::string build_svg(const JobData& job, const SvgStyle& st) {
     auto execs = sorted_execs(job);
     std::vector<double> col_w(execs.size(), 0.0);
     std::vector<double> col_h(execs.size(), 0.0);
     for (size_t i = 0; i < execs.size(); ++i) {
         col_w[i] = measure_exec_width(*execs[i], st) + 20.0;
-        col_h[i] = measure_exec_height(*execs[i], st) + 42.0;
+        col_h[i] = measure_exec_height(*execs[i], st) + 42.0
+                   + measure_shared_tables_height(*execs[i], st);
     }
     double content_w = 0.0;
     for (size_t i = 0; i < col_w.size(); ++i) {
@@ -273,14 +357,12 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
     os << "</svg>\n";
     return os.str();
 }
-
 void save_graph_to_file(const std::string& graph_string,
                         const std::string& filename) {
     std::ofstream out(filename);
     out << graph_string;
     out.close();
 }
-
 void build_graph(const JobData& job_data) {
     SvgStyle st;
     save_graph_to_file(build_svg(job_data, st), "/dev/shm/libcprov/graph.svg");

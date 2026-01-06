@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #define BASE_PATH "/dev/shm"
 
@@ -15,6 +16,8 @@ int main() {
         fprintf(fp, "This is file number %d\n", i);
         fclose(fp);
     }
+    snprintf(filename, sizeof filename, "%s/file1.txt", BASE_PATH);
+    if (unlink(filename) != 0) perror("unlink");
     printf("10 files created in %s\n", BASE_PATH);
     return 0;
 }
