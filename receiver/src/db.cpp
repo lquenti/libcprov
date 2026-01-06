@@ -12,7 +12,8 @@
 DB::DB() {
     std::string base_path = "/dev/shm/libcprov";
     std::filesystem::create_directories(base_path);
-    db_file_ = (base_path + "/libcprov.db").c_str();
+    // db_file_ = (base_path + "/libcprov.db").c_str();
+    db_file_ = "/dev/shm/libcprov/libcprov.db";
 }
 
 void DB::build_tables() {

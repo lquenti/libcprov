@@ -90,8 +90,8 @@ ProcessedInjectorData process_events(std::vector<Event>& events) {
                 break;
             }
             case SysOp::Unlink: {
-                const auto& unlink_event = std::get<AccessOut>(payload);
-                event_recorder.delete_path(unlink_event.path_out);
+                const auto& unlink_event = std::get<AccessIn>(payload);
+                event_recorder.delete_path(unlink_event.path_in);
                 break;
             }
             case SysOp::Exec:

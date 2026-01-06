@@ -122,6 +122,7 @@ Event parse_event_object(ondemand::object event_obj, uint64_t& pid,
         case O::Readv:
         case O::Pread:
         case O::Preadv:
+        case O::Unlink:
             new_event.event_payload
                 = AccessIn{.path_in = get_string(event_data, "path_in")};
             break;
