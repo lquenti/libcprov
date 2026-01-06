@@ -1,13 +1,26 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "model.hpp"
+static std::string format_ns_epoch(uint64_t ns_since_epoch) {
+    uint64_t sec = ns_since_epoch / 1000000000ULL;
+    std::time_t tt = (std::time_t)sec;
+    std::tm tm{};
+    localtime_r(&tt, &tm);
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    return std::string(buf);
+}
 static std::string xml_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
@@ -84,13 +97,19 @@ struct SvgStyle {
     double proc_min_w = 240.0;
     double proc_max_w = 520.0;
     std::string bg = "#ffffff";
-    std::string fg = "#111111";
-    std::string box_stroke = "#333333";
-    std::string proc_title_bg = "#20262e";
+    // std::string fg = "#111111";
+    std::string fg = "#000000";
+    std::string box_stroke = "#000000";
+    std::string proc_title_bg = "#000000";
     std::string proc_title_fg = "#ffffff";
     std::string shared_header_bg = "#CC79A7";
     std::string shared_header_fg = "#ffffff";
     std::string shared_border = "#CC79A7";
+    std::string execmap_header_bg = "#F0E442";
+    std::string execmap_header_fg = "#000000";
+    std::string execmap_border = "#F0E442";
+    std::string execmap_child_bg = "#000000";
+    std::string execmap_child_fg = "#ffffff";
 };
 static double clamp(double x, double lo, double hi) {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -120,7 +139,8 @@ static double measure_exec_width(const ExecData& ex, const SvgStyle& st) {
 static double measure_process_height(const Process& p, const SvgStyle& st) {
     return st.process_title_h + (double)p.operation_map.size() * st.row_h;
 }
-static double measure_exec_height(const ExecData& ex, const SvgStyle& st) {
+static double measure_exec_processes_height(const ExecData& ex,
+                                            const SvgStyle& st) {
     auto procs = sorted_processes(ex);
     double h = 0.0;
     for (size_t i = 0; i < procs.size(); ++i) {
@@ -245,7 +265,6 @@ static double measure_shared_tables_height(const ExecData& ex,
         h += (double)tables[i].second.size() * st.row_h;
         if (i + 1 < tables.size()) h += st.row_gap;
     }
-    h += st.row_gap;
     return h;
 }
 static void draw_shared_table(std::ostringstream& os, double x, double y,
@@ -278,6 +297,83 @@ static void draw_shared_tables(std::ostringstream& os, double x, double y,
         if (i + 1 < tables.size()) cy += st.row_gap;
     }
 }
+static std::vector<std::pair<uint64_t, std::vector<uint64_t>>>
+sorted_execute_set(const ExecData& ex) {
+    std::vector<std::pair<uint64_t, std::vector<uint64_t>>> v;
+    v.reserve(ex.execute_set_map.size());
+    for (const auto& [parent, children_set] : ex.execute_set_map) {
+        std::vector<uint64_t> children;
+        children.reserve(children_set.size());
+        for (uint64_t c : children_set) children.push_back(c);
+        std::sort(children.begin(), children.end());
+        v.push_back({parent, std::move(children)});
+    }
+    std::sort(v.begin(), v.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    return v;
+}
+static std::string proc_name_or_fallback(const ExecData& ex, uint64_t pid) {
+    auto it = ex.process_map.find(pid);
+    if (it == ex.process_map.end())
+        return std::string("pid ") + std::to_string(pid);
+    return it->second.process_command;
+}
+static double measure_execute_tables_height(const ExecData& ex,
+                                            const SvgStyle& st) {
+    if (ex.execute_set_map.empty()) return 0.0;
+    auto items = sorted_execute_set(ex);
+    double h = 0.0;
+    for (size_t i = 0; i < items.size(); ++i) {
+        h += st.process_title_h;
+        h += (double)items[i].second.size() * st.row_h;
+        if (i + 1 < items.size()) h += st.row_gap;
+    }
+    return h;
+}
+static void draw_execute_table(std::ostringstream& os, double x, double y,
+                               double w, const std::string& parent_name,
+                               const std::vector<uint64_t>& children,
+                               const ExecData& ex, const SvgStyle& st) {
+    double h = st.process_title_h + (double)children.size() * st.row_h;
+    svg_rect(os, x, y, w, h, "none", st.execmap_border, st.box_border);
+    svg_rect(os, x, y, w, st.process_title_h, st.execmap_header_bg,
+             st.execmap_border, st.box_border);
+    svg_text(os, x + 8, y + 18, parent_name, st.execmap_header_fg, st.font_size,
+             "Helvetica", "bold");
+    double cy = y + st.process_title_h;
+    for (uint64_t cpid : children) {
+        svg_rect(os, x, cy, w, st.row_h, st.execmap_child_bg, st.execmap_border,
+                 st.box_border);
+        svg_text(os, x + 8, cy + 14, proc_name_or_fallback(ex, cpid),
+                 st.execmap_child_fg, st.mono_font_size, "monospace");
+        cy += st.row_h;
+    }
+}
+static void draw_execute_tables(std::ostringstream& os, double x, double y,
+                                double w, const ExecData& ex,
+                                const SvgStyle& st) {
+    auto items = sorted_execute_set(ex);
+    double cy = y;
+    for (size_t i = 0; i < items.size(); ++i) {
+        uint64_t parent_pid = items[i].first;
+        const auto& children = items[i].second;
+        draw_execute_table(os, x, cy, w, proc_name_or_fallback(ex, parent_pid),
+                           children, ex, st);
+        cy += st.process_title_h + (double)children.size() * st.row_h;
+        if (i + 1 < items.size()) cy += st.row_gap;
+    }
+}
+static double measure_exec_total_height(const ExecData& ex,
+                                        const SvgStyle& st) {
+    double h = 42.0;
+    double ph = measure_exec_processes_height(ex, st);
+    if (ph > 0.0) h += ph;
+    double eh = measure_execute_tables_height(ex, st);
+    if (eh > 0.0) h += st.row_gap + eh;
+    double sh = measure_shared_tables_height(ex, st);
+    if (sh > 0.0) h += st.row_gap + sh;
+    return h;
+}
 static void draw_exec_column(std::ostringstream& os, double x, double top_y,
                              double w, double h, const ExecData& ex,
                              const SvgStyle& st) {
@@ -293,6 +389,13 @@ static void draw_exec_column(std::ostringstream& os, double x, double top_y,
         cy += measure_process_height(p, st);
         if (i + 1 < procs.size()) cy += st.row_gap;
     }
+    double execmap_h = measure_execute_tables_height(ex, st);
+    if (execmap_h > 0.0) {
+        cy += st.row_gap;
+        double tw = w - 20.0;
+        draw_execute_tables(os, x + 10.0, cy, tw, ex, st);
+        cy += execmap_h;
+    }
     double shared_h = measure_shared_tables_height(ex, st);
     if (shared_h > 0.0) {
         cy += st.row_gap;
@@ -306,8 +409,7 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
     std::vector<double> col_h(execs.size(), 0.0);
     for (size_t i = 0; i < execs.size(); ++i) {
         col_w[i] = measure_exec_width(*execs[i], st) + 20.0;
-        col_h[i] = measure_exec_height(*execs[i], st) + 42.0
-                   + measure_shared_tables_height(*execs[i], st);
+        col_h[i] = measure_exec_total_height(*execs[i], st);
     }
     double content_w = 0.0;
     for (size_t i = 0; i < col_w.size(); ++i) {
@@ -315,7 +417,7 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
         if (i + 1 < col_w.size()) content_w += st.col_gap;
     }
     double max_col_h = 0.0;
-    for (double h : col_h) max_col_h = std::max(max_col_h, h);
+    for (double hh : col_h) max_col_h = std::max(max_col_h, hh);
     double width = st.page_pad * 2 + std::max(content_w, 600.0);
     double height = st.page_pad * 2 + st.header_h + max_col_h;
     std::ostringstream os;
@@ -327,31 +429,78 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
        << "\" fill=\"" << st.bg << "\" />\n";
     double hx = st.page_pad;
     double hy = st.page_pad;
+    std::string start_s = format_ns_epoch(job.start_time);
+    std::string end_s = format_ns_epoch(job.end_time);
     svg_text(os, hx, hy + 16, "Job Name: " + job.job_name, st.fg, st.font_size,
              "Helvetica", "bold");
     svg_text(os, hx, hy + 34, "User: " + job.username, st.fg, st.font_size,
              "Helvetica");
-    svg_text(os, hx, hy + 52, "Start: " + std::to_string(job.start_time), st.fg,
-             st.font_size, "Helvetica");
-    svg_text(os, hx, hy + 70, "End: " + std::to_string(job.end_time), st.fg,
-             st.font_size, "Helvetica");
-    double lx = hx + 360;
-    double ly = hy + 4;
-    double lw = 220;
-    double lh = 54;
+    svg_text(os, hx, hy + 52, "Start: " + start_s, st.fg, st.font_size,
+             "Helvetica");
+    double end_value_x = hx + estimate_text_w("Start: ", st.char_w) - 18;
+    svg_text(os, hx, hy + 70, "End:", st.fg, st.font_size, "Helvetica");
+    svg_text(os, end_value_x, hy + 70, end_s, st.fg, st.font_size, "Helvetica");
+    double header_text_w = 0.0;
+    header_text_w = std::max(
+        header_text_w, estimate_text_w("Job Name: " + job.job_name, st.char_w));
+    header_text_w = std::max(
+        header_text_w, estimate_text_w("User: " + job.username, st.char_w));
+    header_text_w = std::max(header_text_w,
+                             estimate_text_w("Start: " + start_s, st.char_w));
+    header_text_w = std::max(header_text_w,
+                             std::max(estimate_text_w("End:", st.char_w),
+                                      estimate_text_w("Start: ", st.char_w)
+                                          + estimate_text_w(end_s, st.char_w)));
+    double lx = hx + header_text_w;
+    double ly = hy + 4.0;
+    double sw = 14.0;
+    double gap = 6.0;
+    double item_gap = 20.0;
+    double title_to_items = 14.0;
+    double pad_l = 12.0;
+    double pad_r = 12.0;
+    double pad_t = 10.0;
+    double pad_b = 12.0;
+    double title_h = 14.0;
+    double ysw = ly + pad_t + title_h + title_to_items;
+    double items_w = 0.0;
+    items_w += sw + gap + estimate_text_w("write", st.char_w);
+    items_w += item_gap + sw + gap + estimate_text_w("read", st.char_w);
+    items_w += item_gap + sw + gap + estimate_text_w("delete", st.char_w);
+    items_w += item_gap + sw + gap + estimate_text_w("execute", st.char_w);
+    items_w += item_gap + sw + gap + estimate_text_w("shared", st.char_w);
+    double title_w = estimate_text_w("Legend", st.char_w);
+    double lw = pad_l + std::max(title_w, items_w) + pad_r;
+    double lh = pad_t + title_h + title_to_items + sw + pad_b;
+    if (lx + lw > width - st.page_pad) lx = width - st.page_pad - lw;
+    if (lx < st.page_pad) lx = st.page_pad;
     svg_rect(os, lx, ly, lw, lh, "none", st.box_stroke, 1.0);
-    svg_text(os, lx + 12, ly + 18, "Legend", st.fg, st.font_size, "Helvetica",
-             "bold");
-    svg_rect(os, lx + 12, ly + 26, 14, 14, "#0072B2", st.box_stroke, 1.0);
-    svg_text(os, lx + 32, ly + 38, "write", st.fg, st.font_size, "Helvetica");
-    svg_rect(os, lx + 82, ly + 26, 14, 14, "#D55E00", st.box_stroke, 1.0);
-    svg_text(os, lx + 102, ly + 38, "read", st.fg, st.font_size, "Helvetica");
-    svg_rect(os, lx + 142, ly + 26, 14, 14, "#009E73", st.box_stroke, 1.0);
-    svg_text(os, lx + 162, ly + 38, "delete", st.fg, st.font_size, "Helvetica");
+    svg_text(os, lx + pad_l, ly + pad_t + 8.0, "Legend", st.fg, st.font_size,
+             "Helvetica", "bold");
+    double x = lx + pad_l;
+    svg_rect(os, x, ysw, sw, sw, "#0072B2", st.box_stroke, 1.0);
+    svg_text(os, x + sw + gap, ysw + 12.0, "write", st.fg, st.font_size,
+             "Helvetica");
+    x += sw + gap + estimate_text_w("write", st.char_w) + item_gap;
+    svg_rect(os, x, ysw, sw, sw, "#D55E00", st.box_stroke, 1.0);
+    svg_text(os, x + sw + gap, ysw + 12.0, "read", st.fg, st.font_size,
+             "Helvetica");
+    x += sw + gap + estimate_text_w("read", st.char_w) + item_gap;
+    svg_rect(os, x, ysw, sw, sw, "#009E73", st.box_stroke, 1.0);
+    svg_text(os, x + sw + gap, ysw + 12.0, "delete", st.fg, st.font_size,
+             "Helvetica");
+    x += sw + gap + estimate_text_w("delete", st.char_w) + item_gap;
+    svg_rect(os, x, ysw, sw, sw, "#F0E442", st.box_stroke, 1.0);
+    svg_text(os, x + sw + gap, ysw + 12.0, "execute", st.fg, st.font_size,
+             "Helvetica");
+    x += sw + gap + estimate_text_w("execute", st.char_w) + item_gap;
+    svg_rect(os, x, ysw, sw, sw, "#CC79A7", st.box_stroke, 1.0);
+    svg_text(os, x + sw + gap, ysw + 12.0, "shared", st.fg, st.font_size,
+             "Helvetica");
     double top_y = st.page_pad + st.header_h;
     double cx = st.page_pad;
     for (size_t i = 0; i < execs.size(); ++i) {
-        draw_exec_column(os, cx, top_y, col_w[i], max_col_h, *execs[i], st);
+        draw_exec_column(os, cx, top_y, col_w[i], col_h[i], *execs[i], st);
         cx += col_w[i] + st.col_gap;
     }
     os << "</svg>\n";
