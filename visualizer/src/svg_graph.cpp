@@ -97,7 +97,6 @@ struct SvgStyle {
     double proc_min_w = 240.0;
     double proc_max_w = 520.0;
     std::string bg = "#ffffff";
-    // std::string fg = "#111111";
     std::string fg = "#000000";
     std::string box_stroke = "#000000";
     std::string proc_title_bg = "#000000";
@@ -110,6 +109,11 @@ struct SvgStyle {
     std::string execmap_border = "#F0E442";
     std::string execmap_child_bg = "#000000";
     std::string execmap_child_fg = "#ffffff";
+    std::string global_shared_header_bg = "#CC79A7";
+    std::string global_shared_header_fg = "#ffffff";
+    std::string global_shared_border = "#CC79A7";
+    double global_col_w = 320.0;
+    std::string global_shared_stroke = "#CC79A7";
 };
 static double clamp(double x, double lo, double hi) {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -206,19 +210,9 @@ static void draw_process(std::ostringstream& os, double x, double y, double w,
         cy += st.row_h;
     }
 }
-static std::string access_color_for_process_on_path(const Process& p,
-                                                    const std::string& path) {
-    auto it = p.operation_map.find(path);
-    if (it == p.operation_map.end()) return "#ffffff";
-    const Operations& ops = it->second;
-    if (ops.write) return "#0072B2";
-    if (ops.read) return "#D55E00";
-    if (ops.deleted) return "#009E73";
-    return "#ffffff";
-}
 struct SharedEntry {
-    std::string proc;
-    std::string color;
+    std::string label;
+    Operations ops;
 };
 static std::vector<std::pair<std::string, std::vector<SharedEntry>>>
 compute_shared_tables(const ExecData& ex) {
@@ -245,8 +239,8 @@ compute_shared_tables(const ExecData& ex) {
         for (size_t idx : idxs) {
             const Process& p = *procs[idx].second;
             SharedEntry e;
-            e.proc = p.process_command;
-            e.color = access_color_for_process_on_path(p, path);
+            e.label = p.process_command;
+            e.ops = p.operation_map.at(path);
             entries.push_back(std::move(e));
         }
         tables.push_back({path, std::move(entries)});
@@ -279,9 +273,9 @@ static void draw_shared_table(std::ostringstream& os, double x, double y,
              "Helvetica", "bold");
     double cy = y + st.process_title_h;
     for (const auto& e : entries) {
-        svg_rect(os, x, cy, w, st.row_h, e.color, st.shared_border,
-                 st.box_border);
-        svg_text(os, x + 8, cy + 14, e.proc, "#000000", st.mono_font_size,
+        svg_row_bg(os, x, cy, w, st.row_h, e.ops, st.shared_border,
+                   st.box_border);
+        svg_text(os, x + 8, cy + 14, e.label, "#000000", st.mono_font_size,
                  "monospace");
         cy += st.row_h;
     }
@@ -403,6 +397,99 @@ static void draw_exec_column(std::ostringstream& os, double x, double top_y,
         draw_shared_tables(os, x + 10.0, cy, tw, ex, st);
     }
 }
+static Operations union_ops_for_exec_path(const ExecData& ex,
+                                          const std::string& path) {
+    Operations u{};
+    for (const auto& [pid, p] : ex.process_map) {
+        (void)pid;
+        auto it = p.operation_map.find(path);
+        if (it == p.operation_map.end()) continue;
+        u.read = u.read || it->second.read;
+        u.write = u.write || it->second.write;
+        u.deleted = u.deleted || it->second.deleted;
+    }
+    return u;
+}
+static std::vector<
+    std::pair<std::string, std::vector<std::pair<std::string, Operations>>>>
+compute_global_shared_tables(const JobData& job) {
+    auto execs = sorted_execs(job);
+    std::unordered_map<std::string, std::vector<size_t>> path_to_exec_idxs;
+    path_to_exec_idxs.reserve(512);
+    for (size_t i = 0; i < execs.size(); ++i) {
+        const ExecData& ex = *execs[i];
+        std::unordered_set<std::string> seen;
+        seen.reserve(ex.process_map.size() * 4 + 8);
+        for (const auto& [pid, p] : ex.process_map) {
+            (void)pid;
+            for (const auto& [path, ops] : p.operation_map) {
+                (void)ops;
+                seen.insert(path);
+            }
+        }
+        for (const auto& path : seen) path_to_exec_idxs[path].push_back(i);
+    }
+    std::vector<
+        std::pair<std::string, std::vector<std::pair<std::string, Operations>>>>
+        tables;
+    tables.reserve(path_to_exec_idxs.size());
+    for (auto& kv : path_to_exec_idxs) {
+        auto& path = kv.first;
+        auto& idxs = kv.second;
+        std::sort(idxs.begin(), idxs.end());
+        idxs.erase(std::unique(idxs.begin(), idxs.end()), idxs.end());
+        if (idxs.size() < 2) continue;
+        std::vector<std::pair<std::string, Operations>> rows;
+        rows.reserve(idxs.size());
+        for (size_t idx : idxs) {
+            const ExecData& ex = *execs[idx];
+            rows.push_back({ex.command, union_ops_for_exec_path(ex, path)});
+        }
+        tables.push_back({path, std::move(rows)});
+    }
+    std::sort(tables.begin(), tables.end(),
+              [](auto& a, auto& b) { return a.first < b.first; });
+    return tables;
+}
+static double measure_global_shared_height(const JobData& job,
+                                           const SvgStyle& st) {
+    auto tables = compute_global_shared_tables(job);
+    if (tables.empty()) return 0.0;
+    double h = 0.0;
+    for (size_t i = 0; i < tables.size(); ++i) {
+        h += st.process_title_h;
+        h += (double)tables[i].second.size() * st.row_h;
+        if (i + 1 < tables.size()) h += st.row_gap;
+    }
+    return h;
+}
+static void draw_global_shared(std::ostringstream& os, double x, double y,
+                               double w, const JobData& job,
+                               const SvgStyle& st) {
+    auto tables = compute_global_shared_tables(job);
+    double cy = y;
+    for (size_t i = 0; i < tables.size(); ++i) {
+        const std::string& path = tables[i].first;
+        const auto& rows = tables[i].second;
+        double th = st.process_title_h + (double)rows.size() * st.row_h;
+        svg_rect(os, x, cy, w, th, "none", st.global_shared_border,
+                 st.box_border);
+        svg_rect(os, x, cy, w, st.process_title_h, st.global_shared_header_bg,
+                 st.global_shared_border, st.box_border);
+        svg_text(os, x + 8, cy + 18, path, st.global_shared_header_fg,
+                 st.font_size, "Helvetica", "bold");
+        double ry = cy + st.process_title_h;
+        for (const auto& r : rows) {
+            svg_row_bg(os, x, ry, w, st.row_h, r.second,
+                       st.global_shared_border, st.box_border);
+            svg_text(os, x + 8, ry + 14, r.first, "#000000", st.mono_font_size,
+                     "monospace");
+            ry += st.row_h;
+        }
+        cy += th;
+        if (i + 1 < tables.size()) cy += st.row_gap;
+    }
+}
 static std::string build_svg(const JobData& job, const SvgStyle& st) {
     auto execs = sorted_execs(job);
     std::vector<double> col_w(execs.size(), 0.0);
@@ -411,13 +498,17 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
         col_w[i] = measure_exec_width(*execs[i], st) + 20.0;
         col_h[i] = measure_exec_total_height(*execs[i], st);
     }
+    double global_shared_h = measure_global_shared_height(job, st);
     double content_w = 0.0;
     for (size_t i = 0; i < col_w.size(); ++i) {
         content_w += col_w[i];
         if (i + 1 < col_w.size()) content_w += st.col_gap;
     }
+    if (global_shared_h > 0.0) content_w += st.col_gap + st.global_col_w;
     double max_col_h = 0.0;
     for (double hh : col_h) max_col_h = std::max(max_col_h, hh);
+    double right_h = global_shared_h > 0.0 ? (42.0 + global_shared_h) : 0.0;
+    max_col_h = std::max(max_col_h, right_h);
     double width = st.page_pad * 2 + std::max(content_w, 600.0);
     double height = st.page_pad * 2 + st.header_h + max_col_h;
     std::ostringstream os;
@@ -502,6 +593,16 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
     for (size_t i = 0; i < execs.size(); ++i) {
         draw_exec_column(os, cx, top_y, col_w[i], col_h[i], *execs[i], st);
         cx += col_w[i] + st.col_gap;
+    }
+    if (global_shared_h > 0.0) {
+        double gx = cx;
+        double gh = 42.0 + global_shared_h;
+        svg_rect(os, gx, top_y, st.global_col_w, gh, "none",
+                 st.global_shared_stroke, st.box_border);
+        svg_text(os, gx + 10, top_y + 18, "shared across execs", st.fg,
+                 st.font_size, "Helvetica", "bold");
+        double gy = top_y + 32;
+        draw_global_shared(os, gx + 10.0, gy, st.global_col_w - 20.0, job, st);
     }
     os << "</svg>\n";
     return os.str();
