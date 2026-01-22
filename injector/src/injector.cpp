@@ -79,6 +79,12 @@ std::string get_full_cmd() {
     return cmd;
 }
 
+uint64_t random_id() {
+    static thread_local std::mt19937_64 gen{std::random_device{}()};
+    static thread_local std::uniform_int_distribution<uint64_t> dist;
+    return dist(gen);
+}
+
 static const std::string slurm_job_id = "1";
 static const std::string slurm_cluster_name = "cname1";
 
@@ -86,6 +92,7 @@ static std::string path_exec = get_env("PROV_PATH_EXEC");
 static std::vector<std::string> aggregated_events;
 static std::mutex events_mutex;
 static atomic_bool after_failed_execv = ATOMIC_VAR_INIT(false);
+static std::string nodename = std::to_string(random_id());
 
 static std::string now_ns() {
     using namespace std::chrono;
@@ -307,15 +314,8 @@ struct ProvSaveData {
     std::string all_events;
 };
 
-uint64_t random_id() {
-    static thread_local std::mt19937_64 gen{std::random_device{}()};
-    static thread_local std::uniform_int_distribution<uint64_t> dist;
-    return dist(gen);
-}
-
 ProvSaveData prepare_save_events() {
     // std::ifstream file("/etc/machine-id");
-    std::string nodename = std::to_string(random_id());
     // std::getline(file, nodename);
     std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
                              + std::to_string(getpid()) + ".jsonl";
