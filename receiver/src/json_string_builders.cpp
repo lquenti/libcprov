@@ -44,9 +44,9 @@ std::string build_json_array(
     return json_array.str();
 }
 
-std::string build_execute_map_json(const ExecuteSetMap& execute_set_map) {
+std::string build_execute_map_json(const ExecuteSetMapDB& execute_set_map_db) {
     std::vector<std::string> execute_map_json_strings;
-    for (auto& [parent_process_id, child_process_id_set] : execute_set_map) {
+    for (auto& [parent_process_id, child_process_id_set] : execute_set_map_db) {
         std::vector<std::string> child_process_id_vector;
         child_process_id_vector.reserve(child_process_id_set.size());
         for (uint64_t child_process_id : child_process_id_set) {
@@ -93,9 +93,9 @@ std::string build_operations_json(
     return build_json_object(operation_map_json_format, false);
 }
 
-std::string build_processes_data_json(ProcessMap process_map) {
+std::string build_processes_data_json(ProcessMapDB process_map_db) {
     std::vector<std::string> process_json_vector;
-    for (auto& [process_id, process] : process_map) {
+    for (auto& [process_id, process] : process_map_db) {
         std::string process_json
             = R"({"process_command":")" + process.process_command
               + R"(","process_id":)" + std::to_string(process_id)
@@ -112,12 +112,12 @@ std::string build_exec_json(ExecData exec_data) {
         = build_env_variables_map_json(
             exec_data.env_variables_hash_to_variables);
     std::string execute_map_json
-        = build_execute_map_json(exec_data.execute_set_map);
+        = build_execute_map_json(exec_data.execute_set_map_db);
     std::string rename_map_json = build_json_object(exec_data.rename_map, true);
     std::string json_string
         = R"({"start_time":)" + std::to_string(exec_data.start_time.value())
           + R"(,"processes":)"
-          + build_processes_data_json(std::move(exec_data.process_map))
+          + build_processes_data_json(std::move(exec_data.process_map_db))
           + R"(,"execute_map":)" + execute_map_json + R"(,"rename_map":)"
           + rename_map_json + R"(,"env_variable_hash_pair_array":)"
           + env_variable_hash_pair_array_string + R"(,"json":")"

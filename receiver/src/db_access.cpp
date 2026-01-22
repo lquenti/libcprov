@@ -4,36 +4,38 @@
 #include "db.hpp"
 #include "model.hpp"
 
-std::unordered_map<uint64_t, uint64_t> add_process(DB& db, uint64_t exec_id,
-                                                   ProcessMap process_map) {
-    std::unordered_map<uint64_t, uint64_t> process_hash_to_id;
-    for (auto& [process_hash, process] : process_map) {
-        process_hash_to_id[process_hash] = db.add_process(
+std::unordered_map<std::string, uint64_t> add_processes(
+    DB& db, uint64_t exec_id, ProcessMap process_map) {
+    std::unordered_map<std::string, uint64_t> process_id_to_process_db_id;
+    for (auto& [process_id, process] : process_map) {
+        process_id_to_process_db_id[process_id] = db.add_process(
             exec_id, process.process_command, process.env_variable_hash);
     }
-    return process_hash_to_id;
+    return process_id_to_process_db_id;
 }
 
 void add_execute_mappings(
     DB& db, uint64_t exec_id, const ExecuteSetMap& execute_set_map,
-    std::unordered_map<uint64_t, uint64_t> process_hash_to_id) {
-    for (auto& [parent_process_hash, child_process_hashes] : execute_set_map) {
-        uint64_t parent_process_id = process_hash_to_id[parent_process_hash];
-        uint64_t child_process_id;
-        for (uint64_t child_process_hash : child_process_hashes) {
-            child_process_id = process_hash_to_id[child_process_hash];
-            db.add_execute_mapping(exec_id, parent_process_id,
-                                   child_process_id);
+    std::unordered_map<std::string, uint64_t> process_id_to_process_db_id) {
+    for (auto& [parent_process_id, child_process_ids] : execute_set_map) {
+        uint64_t parent_process_db_id
+            = process_id_to_process_db_id[parent_process_id];
+        uint64_t child_process_db_id;
+        for (std::string child_process_id : child_process_ids) {
+            child_process_db_id = process_id_to_process_db_id[child_process_id];
+            db.add_execute_mapping(exec_id, parent_process_db_id,
+                                   child_process_db_id);
         }
     }
 }
 
-void add_operations(DB& db, uint64_t exec_id, ProcessMap process_map,
-                    std::unordered_map<uint64_t, uint64_t> process_hash_to_id) {
-    for (auto& [process_hash, process] : process_map) {
-        uint64_t process_id = process_hash_to_id[process_hash];
+void add_operations(
+    DB& db, uint64_t exec_id, ProcessMap process_map,
+    std::unordered_map<std::string, uint64_t> process_id_to_process_db_id) {
+    for (auto& [process_id, process] : process_map) {
+        uint64_t process_db_id = process_id_to_process_db_id[process_id];
         for (auto& [path, operations] : process.operation_map) {
-            db.add_operations(process_id, path, operations.read,
+            db.add_operations(process_db_id, path, operations.read,
                               operations.write, operations.deleted);
         }
     }
@@ -89,12 +91,13 @@ void save_db_data(DB& db, const ParsedInjectorData& parsed_injector_data) {
                               exec_data.json, exec_data.command);
             add_variable_hash_pairs(db,
                                     exec_data.env_variables_hash_to_variables);
-            std::unordered_map<uint64_t, uint64_t> process_hash_to_id
-                = add_process(db, exec_id, exec_data.process_map);
+            std::unordered_map<std::string, uint64_t>
+                process_id_to_process_db_id
+                = add_processes(db, exec_id, exec_data.process_map);
             add_operations(db, exec_id, exec_data.process_map,
-                           process_hash_to_id);
+                           process_id_to_process_db_id);
             add_execute_mappings(db, exec_id, exec_data.execute_set_map,
-                                 process_hash_to_id);
+                                 process_id_to_process_db_id);
             add_renames(db, exec_id, exec_data.rename_map);
             db.commit_job();
         }

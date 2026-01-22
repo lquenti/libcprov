@@ -80,28 +80,18 @@ std::string build_execute_map_json(const ExecuteSetMap& execute_set_map) {
     for (auto& [parent_process_id, child_process_id_set] : execute_set_map) {
         std::vector<std::string> child_process_id_vector;
         child_process_id_vector.reserve(child_process_id_set.size());
-        for (uint64_t child_process_id : child_process_id_set) {
-            child_process_id_vector.push_back(std::to_string(child_process_id));
+        for (std::string child_process_id : child_process_id_set) {
+            child_process_id_vector.push_back(R"(")" + child_process_id
+                                              + R"(")");
         }
         std::string execute_map_json
-            = (R"({"parent_process_id":)" + std::to_string(parent_process_id)
-               + R"(,"child_process_id_array":)"
+            = (R"({"parent_process_id":")" + parent_process_id
+               + R"(","child_process_id_array":)"
                + build_json_array(child_process_id_vector) + "}");
         execute_map_json_strings.push_back(execute_map_json);
     }
     return build_json_array(execute_map_json_strings);
 }
-
-/*std::string build_rename_map_json(
-    std::unordered_map<std::string, std::string> rename_map) {
-    std::vector<std::string> rename_map_json_strings;
-    for (auto& [original_path, new_path] : rename_map) {
-        std::string rename_map_json_string
-            = R"(")" + original_path + R"(":")" + new_path + R"(")";
-        rename_map_json_strings.push_back(rename_map_json_string);
-    }
-    return build_json_array(rename_map_json_strings);
-}*/
 
 std::string build_env_variables_map_json(
     std::unordered_map<uint64_t, std::string> env_variables_hash_to_variables) {
@@ -121,24 +111,6 @@ struct OperationsJsonFormat {
     std::vector<std::string> writes;
     std::vector<std::string> deletes;
 };
-
-/*
-OperationsJsonFormat convert_operation_map(
-    std::unordered_map<std::string, Operations> operation_map) {
-    OperationsJsonFormat operations_json_format;
-    for (auto& [path, operations] : operation_map) {
-        if (operations.reads) {
-            operations_json_format.reads.push_back(path);
-        }
-        if (operations.writes) {
-            operations_json_format.writes.push_back(path);
-        }
-        if (operations.deletes) {
-            operations_json_format.deletes.push_back(path);
-        }
-    }
-    return operations_json_format;
-}*/
 
 std::string build_operations_json(
     std::unordered_map<std::string, Operations> operation_map) {
@@ -164,19 +136,12 @@ std::string build_operations_json(
 std::string build_processes_data_json(ProcessMap process_map) {
     bool first = true;
     std::vector<std::string> process_json_vector;
-    for (auto& [process_hash, process] : process_map) {
-        // OperationsJsonFormat operations_json_format
-        //     = convert_operation_map(std::move(process.operation_map));
+    for (auto& [process_id, process] : process_map) {
         std::string process_json
             = R"({"process_command":")" + process.process_name
-              + R"(","process_hash":)" + std::to_string(process_hash)
-              + R"(,"env_variable_hash":)"
+              + R"(","process_id":")" + process_id + R"(","env_variable_hash":)"
               + std::to_string(process.env_variable_hash) + R"(,"operations":)"
               + build_operations_json(process.operation_map) + R"(})";
-        //+ R"("reads":)" + build_json_array(operations_json_format.reads)
-        //+ R"("writes":)" + build_json_array(operations_json_format.writes)
-        //+ R"("deletes":)"
-        //+build_json_array(operations_json_format.deletes) + R"(})";
         process_json_vector.push_back(process_json);
     }
     return build_json_array(process_json_vector);

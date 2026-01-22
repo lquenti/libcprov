@@ -20,6 +20,8 @@ visualizer/.cache
 test_scripts/first_exec
 test_scripts/first_exec_child1
 test_scripts/second_exec
+test_scripts/second_exec_child1
+querier/
 model_graphs/*
 !model_graphs/
 !model_graphs/database_model.dot

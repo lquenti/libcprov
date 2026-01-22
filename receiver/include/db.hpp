@@ -68,8 +68,8 @@ class DB {
     bool col_bool(sqlite3_stmt* st, int i);
     std::unordered_map<std::string, Operations> read_operation_map(
         sqlite3* db, uint64_t process_id);
-    ProcessMap read_process_map(sqlite3* db, uint64_t exec_id);
-    ExecuteSetMap read_execute_set_map(sqlite3* db, uint64_t exec_id);
+    ProcessMapDB read_process_map(sqlite3* db, uint64_t exec_id);
+    ExecuteSetMapDB read_execute_set_map(sqlite3* db, uint64_t exec_id);
     RenameMap read_rename_map(sqlite3* db, uint64_t exec_id);
     EnvVariableHashPairs read_env_pairs_for_exec(sqlite3* db, uint64_t exec_id);
     ExecData read_exec(sqlite3* db, uint64_t exec_id);

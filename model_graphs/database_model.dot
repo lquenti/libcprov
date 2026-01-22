@@ -6,7 +6,7 @@ digraph G {
 
   env_variables_hash_pairs [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>env_variables_hash_pairs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>env_variables_hash_pairs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>env_variables_hash</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_env_variables_hash" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_env_variables_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>env_variables_json</B></TD><TD>TEXT</TD><TD PORT="R_env_variables_json" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
     </TABLE>
@@ -14,7 +14,7 @@ digraph G {
 
   jobs [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>jobs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>jobs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_id</B></TD><TD>INTEGER (PK-part)</TD><TD PORT="R_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>cluster_name</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_job_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_name</B></TD><TD>TEXT</TD><TD PORT="R_job_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
@@ -28,7 +28,7 @@ digraph G {
 
   execs [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>execs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>execs</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>job_id</B></TD><TD>INTEGER (FK-part)</TD><TD PORT="R_job_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>cluster_name</B></TD><TD>TEXT (FK-part)</TD><TD PORT="R_cluster_name" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
@@ -41,7 +41,7 @@ digraph G {
 
   processes [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>processes</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>processes</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>process_id</B></TD><TD>INTEGER (PK)</TD><TD PORT="R_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_launch_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>launch_command</B></TD><TD>TEXT</TD><TD PORT="R_launch_command" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
@@ -51,8 +51,7 @@ digraph G {
 
   execute_mappings [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>execute_mappings</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
-      <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>execute_mappings</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_parent_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>parent_process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_parent_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_child_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>child_process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_child_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
     </TABLE>
@@ -60,7 +59,7 @@ digraph G {
 
   operations [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>operations</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>operations</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>process_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_process_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_read" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>read</B></TD><TD>INTEGER</TD><TD PORT="R_read" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
@@ -71,7 +70,7 @@ digraph G {
 
   renames [ label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#ead1dc" COLSPAN="2"><B>renames</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
+      <TR><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD BGCOLOR="#97D8C4" COLSPAN="2"><B>renames</B></TD><TD WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>exec_id</B></TD><TD>INTEGER (FK, PK-part)</TD><TD PORT="R_exec_id" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_original_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>original_path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_original_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
       <TR><TD PORT="L_new_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD><TD><B>new_path</B></TD><TD>TEXT (PK-part)</TD><TD PORT="R_new_path" WIDTH="0" FIXEDSIZE="TRUE" BORDER="0" CELLPADDING="0"></TD></TR>
@@ -85,7 +84,6 @@ digraph G {
   processes:R_exec_id -> execs:L_exec_id;
   processes:R_env_variables_hash -> env_variables_hash_pairs:L_env_variables_hash;
 
-  execute_mappings:R_exec_id -> execs:L_exec_id;
   execute_mappings:R_parent_process_id -> processes:L_process_id;
   execute_mappings:R_child_process_id -> processes:L_process_id;
 

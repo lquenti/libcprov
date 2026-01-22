@@ -25,6 +25,8 @@ struct Delete {
     std::string deleted_path;
 };
 using ExecuteSetMap
+    = std::unordered_map<std::string, std::unordered_set<std::string>>;
+using ExecuteSetMapDB
     = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
 using RenameMap = std::unordered_map<std::string, std::string>;
 /*
@@ -62,12 +64,15 @@ struct Process {
 };
 
 using EnvVariableHashPairs = std::unordered_map<uint64_t, std::string>;
-using ProcessMap = std::unordered_map<uint64_t, Process>;
+using ProcessMap = std::unordered_map<std::string, Process>;
+using ProcessMapDB = std::unordered_map<uint64_t, Process>;
 struct ExecData {
     std::optional<uint64_t> exec_id;
     std::optional<uint64_t> start_time;
     ProcessMap process_map;
+    ProcessMapDB process_map_db;
     ExecuteSetMap execute_set_map;
+    ExecuteSetMapDB execute_set_map_db;
     RenameMap rename_map;
     EnvVariableHashPairs env_variables_hash_to_variables;
     std::string json;

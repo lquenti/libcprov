@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -7,43 +8,21 @@
 #include <vector>
 
 enum class SysOp {
-    Write,
-    Writev,
-    Pwrite,
-    Pwritev,
-    Truncate,
-    Msync,
-    Fallocate,
-    Read,
-    Readv,
-    Pread,
-    Preadv,
-    Getdents,
-    Transfer,
-    Open,
-    Close,
-    Dup,
-    Pipe,
-    Rename,
-    Link,
-    SymLink,
-    Unlink,
-    NetSend,
-    NetRecv,
-    Exec,
-    Spawn,
-    Fork,
-    System,
     ProcessStart,
     ProcessEnd,
-    JobStart,
-    JobEnd,
-    Unknown
+    Write,
+    Read,
+    Transfer,
+    Rename,
+    Exec,
+    ExecFork,
+    ExecFail,
+    Unlink
 };
 
 struct EventHeader {
     uint64_t ts = 0;
-    SysOp op = SysOp::Unknown;
+    SysOp op;
     std::string raw_type;
 };
 struct AccessIn {
@@ -54,16 +33,16 @@ struct AccessOut {
     std::string path_out;
     uint32_t count = 0;
 };
-struct AccessInOut {
-    std::string path_in;
-    std::string path_out;
+struct Transfer {
+    std::string path_read;
+    std::string path_write;
+};
+struct Rename {
+    std::string original_path;
+    std::string new_path;
 };
 struct ExecCall {
-    std::string target;
-    int target_fd = -1;
-    std::string target_path;
-    int err = 0;
-    bool failed = false;
+    std::optional<uint64_t> pid;
 };
 struct SpawnCall {
     uint64_t child_pid = -1;
@@ -73,44 +52,46 @@ struct ForkCall {
     uint64_t child_pid = -1;
 };
 struct ProcessStart {
+    uint64_t pid = 0;
     uint64_t ppid = 0;
     std::string process_name;
     std::string env_variables;
-    std::string process_hash;
+    // uint64_t process_hash;
+    std::optional<uint64_t> env_variables_hash;
     // std::string step_id;
     // std::string step_name;
 };
 struct ProcessEnd {};
 
-using EventPayload
-    = std::variant<AccessIn, AccessOut, AccessInOut, ExecCall, SpawnCall,
-                   ForkCall, ProcessStart, ProcessEnd>;
+using EventPayload = std::variant<std::string, Transfer, Rename, ExecCall,
+                                  ProcessStart, ProcessEnd>;
 
 struct Event {
     uint64_t ts = 0;
-    SysOp operation = SysOp::Unknown;
-    uint64_t pid = 0;
-    std::string slurmd_nodename = "";
+    SysOp operation;
+    std::string process_id;
     EventPayload event_payload;
 };
 
-struct OperationTable {
+using EventsByFile = std::vector<std::vector<Event>>;
+
+struct BackupOperations {
     bool read = false;
     bool write = false;
     bool execute = false;
 };
 
-struct GoedlOperations {
-    std::unordered_map<std::string, OperationTable> goedl_operation_map;
-};
+using OperationsDataBackupFormat
+    = std::unordered_map<std::string, BackupOperations>;
 
-struct EnvVariablesHashToVariables {
-    uint64_t hash;
-    std::string env_variables;
-};
+using EnvVariablesHashToVariables = std::unordered_map<uint64_t, std::string>;
+/*uint64_t hash;
+std::string env_variables;
+}
+;*/
 
 using ExecuteSetMap
-    = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
+    = std::unordered_map<std::string, std::unordered_set<std::string>>;
 
 struct Operations {
     bool read = false;
@@ -118,13 +99,24 @@ struct Operations {
     bool deleted = false;
 };
 
+struct LinuxProcess {
+    uint64_t ppid;
+    uint64_t start_time;
+    uint64_t end_time;
+    std::string process_id;
+    // std::string process_name;
+    // uint64_t env_variable_hash;
+};
+
+using LinuxProcessMap = std::unordered_map<uint64_t, std::vector<LinuxProcess>>;
+
 struct Process {
     std::string process_name;
     uint64_t env_variable_hash;
     // std::vector<std::string> process_json_operation_objects_;
     std::unordered_map<std::string, Operations> operation_map;
 };
-using ProcessMap = std::unordered_map<uint64_t, Process>;
+using ProcessMap = std::unordered_map<std::string, Process>;
 struct ProcessedExecData {
     ProcessMap process_map;
     std::unordered_map<std::string, std::string> rename_map;
@@ -132,6 +124,6 @@ struct ProcessedExecData {
     std::unordered_map<uint64_t, std::string> env_variables_hash_to_variables;
 };
 struct ProcessedInjectorData {
-    GoedlOperations goedl_operations;
+    OperationsDataBackupFormat operations_data_backup_format;
     ProcessedExecData processed_exec_data;
 };

@@ -11,8 +11,8 @@
 #include <string>
 #include <thread>
 
+#include "data_backup.hpp"
 #include "get_job_info.hpp"
-#include "goedl.hpp"
 #include "json_string_builders.hpp"
 #include "model.hpp"
 #include "parser.hpp"
@@ -42,9 +42,10 @@ void start_preload_process(const std::string& so_path, const std::string& cmd,
 }
 
 ProcessedInjectorData extract_injector_data(const std::string& path_access) {
-    std::vector<Event> events = parse_all_jsonl_files(path_access);
+    EventsByFile events_by_file = parse_all_jsonl_files(path_access);
     std::filesystem::remove_all(path_access);
-    ProcessedInjectorData processed_injector_data = process_events(events);
+    ProcessedInjectorData processed_injector_data
+        = process_events(events_by_file);
     return processed_injector_data;
 }
 
@@ -164,18 +165,22 @@ int main(int argc, char** argv) {
                 = build_header("exec", path_access, job_id, cluster_name);
             ExecOpts exec_opts = std::get<ExecOpts>(parsed.opts);
             std::string exec_path = exec_opts.path;
-            std::string exec_json_input = exec_opts.json;
-            std::string exec_command = exec_opts.command;
             std::string absolute_path_exec
                 = std::filesystem::canonical(exec_path).string();
+            backup_data_pre_exec(absolute_path_exec);
+            std::string exec_json_input = exec_opts.json;
+            std::string exec_command = exec_opts.command;
             std::string injector_data_path = path_access + "/injector_data";
             set_env_variables(absolute_path_exec, injector_data_path);
-            std::string injector_path = "./injector/build/libinjector.so";
+            std::string injector_path
+                = "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
+                  "build/libinjector.so";
             start_preload_process(injector_path, exec_command,
                                   injector_data_path);
             ProcessedInjectorData processed_injector_data
                 = extract_injector_data(injector_data_path);
-            index_in_goedl(std::move(processed_injector_data.goedl_operations));
+            ingest_prov_data(
+                processed_injector_data.operations_data_backup_format);
             std::string exec_json_output = build_exec_json_output(
                 absolute_path_exec, exec_json_input, exec_command,
                 std::move(processed_injector_data.processed_exec_data));

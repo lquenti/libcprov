@@ -571,7 +571,9 @@ static std::string build_svg(const JobData& job, const SvgStyle& st) {
     std::string end_s = format_ns_epoch(job.end_time);
     svg_text(os, hx, hy + 16, "Job Name: " + job.job_name, st.fg, st.font_size,
              "Helvetica", "bold");
-    svg_text(os, hx, hy + 34, "User: " + job.username, st.fg, st.font_size,
+    // svg_text(os, hx, hy + 34, "User: " + job.username, st.fg, st.font_size,
+    //          "Helvetica");
+    svg_text(os, hx, hy + 34, "User: example_user", st.fg, st.font_size,
              "Helvetica");
     svg_text(os, hx, hy + 52, "Start: " + start_s, st.fg, st.font_size,
              "Helvetica");

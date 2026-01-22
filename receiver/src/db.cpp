@@ -310,8 +310,8 @@ std::unordered_map<std::string, Operations> DB::read_operation_map(
     return out;
 }
 
-ProcessMap DB::read_process_map(sqlite3* db, uint64_t exec_id) {
-    ProcessMap out;
+ProcessMapDB DB::read_process_map(sqlite3* db, uint64_t exec_id) {
+    ProcessMapDB out;
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT process_id, launch_command, env_variables_hash "
@@ -330,8 +330,8 @@ ProcessMap DB::read_process_map(sqlite3* db, uint64_t exec_id) {
     return out;
 }
 
-ExecuteSetMap DB::read_execute_set_map(sqlite3* db, uint64_t exec_id) {
-    ExecuteSetMap out;
+ExecuteSetMapDB DB::read_execute_set_map(sqlite3* db, uint64_t exec_id) {
+    ExecuteSetMapDB out;
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(
         db,
@@ -412,8 +412,8 @@ ExecData DB::read_exec(sqlite3* db, uint64_t exec_id) {
         exec.command = col_text(st, 4);
     }
     sqlite3_finalize(st);
-    exec.process_map = read_process_map(db, exec_id);
-    exec.execute_set_map = read_execute_set_map(db, exec_id);
+    exec.process_map_db = read_process_map(db, exec_id);
+    exec.execute_set_map_db = read_execute_set_map(db, exec_id);
     exec.rename_map = read_rename_map(db, exec_id);
     exec.env_variables_hash_to_variables = read_env_pairs_for_exec(db, exec_id);
     return exec;

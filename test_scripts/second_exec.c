@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define BASE_PATH "/dev/shm"
@@ -35,5 +37,22 @@ int main() {
     fprintf(fp, "Appended by second_exec (write to file6)\n");
     fclose(fp);
     printf("Wrote to %s\n", filename);
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork");
+        return 1;
+    }
+    if (pid == 0) {
+        char* argv[] = {(char*)"./test_scripts/second_exec_child1",
+                        (char*)"example_param", NULL};
+        execv(argv[0], argv);
+        perror("execv");
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        perror("waitpid");
+        return 1;
+    }
     return 0;
 }

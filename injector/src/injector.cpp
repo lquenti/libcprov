@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <spawn.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 #include <fstream>
 #include <mutex>
 #include <queue>
+#include <random>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -77,22 +79,13 @@ std::string get_full_cmd() {
     return cmd;
 }
 
-/*
-std::string get_exec_name() {
-    std::ifstream f("/proc/self/comm");
-    std::string name = "";
-    if (f) std::getline(f, name);
-    return name;
-}*/
-// const std::string slurm_job_id = get_env("SLURM_JOB_ID");
-// const std::string slurm_cluster_name = get_env("SLURM_CLUSTER_NAME");
 static const std::string slurm_job_id = "1";
 static const std::string slurm_cluster_name = "cname1";
 
 static std::string path_exec = get_env("PROV_PATH_EXEC");
-// static std::ostringstream aggregated_events_json;
 static std::vector<std::string> aggregated_events;
 static std::mutex events_mutex;
+static atomic_bool after_failed_execv = ATOMIC_VAR_INIT(false);
 
 static std::string now_ns() {
     using namespace std::chrono;
@@ -146,10 +139,8 @@ static std::string fd_path(const int& fd) {
     }
 }
 
-static void log_input_event(const std::string operation,
+/*static void log_unlink(const std::string operation,
                             const std::string path_in) {
-    // if (!path_in.starts_with(path_exec)) return;
-
     std::string ts = now_ns();
     std::string json = R"({"path_in":")" + path_in + R"("})";
     add_operation(operation, ts, json);
@@ -157,103 +148,60 @@ static void log_input_event(const std::string operation,
 
 static void log_output_event(const std::string operation,
                              const std::string path_out) {
-    // if (!path_out.starts_with(path_exec)) return;
-
     std::string ts = now_ns();
     std::string json = R"({"path_out":")" + path_out + R"("})";
     add_operation(operation, ts, json);
-}
+}*/
 
-static void log_input_output_event(const std::string operation,
-                                   const std::string path_in,
-                                   const std::string path_out) {
-    // if (!(path_in.starts_with(path_exec)
-    //       || path_out.starts_with(path_exec)))
-    //     return;
-
+static void log_rename(const std::string original_path,
+                       const std::string new_path) {
     std::string ts = now_ns();
-    std::string json = R"({"path_in":")" + path_in + R"(","path_out":")"
-                       + path_out + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({"original_path":")" + original_path
+                       + R"(","new_path":")" + new_path + R"("})";
+    add_operation("RENAME", ts, json);
 }
 
-static void log_input_event_fd(const std::string operation, int path_in_fd) {
+static void log_read_fd(int path_in_fd) {
     std::string path_in = fd_path(path_in_fd);
-    // if (!path_in.starts_with(path_exec)) return;
-
     std::string ts = now_ns();
-    std::string json = R"({"path_in":")" + path_in + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({"path":")" + path_in + R"("})";
+    add_operation("READ", ts, json);
 }
 
-static void log_output_event_fd(const std::string operation, int path_out_fd) {
+static void log_write_fd(int path_out_fd) {
     std::string path_out = fd_path(path_out_fd);
-    // if (!path_out.starts_with(path_exec)) return;
-
     std::string ts = now_ns();
-    std::string json = R"({"path_out":")" + path_out + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({"path":")" + path_out + R"("})";
+    add_operation("WRITE", ts, json);
 }
 
-static void log_input_output_event_fd(const std::string operation,
-                                      int path_in_fd, int path_out_fd) {
-    std::string path_in = fd_path(path_in_fd);
-    std::string path_out = fd_path(path_out_fd);
-
-    // if (!(path_in.starts_with(path_exec)
-    //       || path_out.starts_with(path_exec)))
-    //     return;
-
+static void log_transfer_fd(int path_read_fd, int path_write_fd) {
+    std::string path_read = fd_path(path_read_fd);
+    std::string path_write = fd_path(path_write_fd);
     std::string ts = now_ns();
-    std::string json = R"({"path_in":")" + path_in + R"(","path_out":")"
-                       + path_out + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({"path_read":")" + path_read + R"(","path_write":")"
+                       + path_write + R"("})";
+    add_operation("TRANSFER", ts, json);
 }
 
-static void log_fork_event(const std::string operation, pid_t child_pid) {
+static void log_exec() {
     std::string ts = now_ns();
-    std::string json = R"({"child_pid":)" + std::to_string(child_pid) + R"(})";
-    add_operation(operation, ts, json);
+    std::string json = R"({})";
+    add_operation("EXEC", ts, json);
 }
 
-static void log_spawn_event(const std::string operation, pid_t child_pid,
-                            const std::string target) {
-    // if (!target.starts_with(path_exec)) return;
-
+static void log_exec_fail() {
     std::string ts = now_ns();
-    std::string json = R"({"child_pid":)" + std::to_string(child_pid)
-                       + R"(,"path":")" + target + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({})";
+    add_operation("EXEC_FAIL", ts, json);
 }
 
-static void log_exec_event(const std::string operation,
-                           const std::string target) {
-    // if (!target.starts_with(path_exec)) return;
-
+static void log_unlink(std::string path) {
     std::string ts = now_ns();
-    std::string json = R"({"path":")" + target + R"("})";
-    add_operation(operation, ts, json);
+    std::string json = R"({"path":")" + path + R"("})";
+    add_operation("UNLINK", ts, json);
 }
-
-static void log_exec_fd_event(const std::string operation, int path_target_fd) {
-    std::string target_string = fd_path(path_target_fd);
-    // if (!target_string.starts_with(path_exec)) return;
-
-    std::string ts = now_ns();
-    std::string json = R"({"path":")" + target_string + R"("})";
-    add_operation(operation, ts, json);
-}
-
-static void log_exec_fail_event(const std::string operation,
-                                const std::string target, int err) {
-    // if (!target.starts_with(path_exec)) return;
-
-    std::string ts = now_ns();
-    std::string json = R"({"path":")" + target + R"(","error":)"
-                       + std::to_string(err) + R"(})";
-    add_operation(operation, ts, json);
-}
-
+/*
 static void log_net_send_event(const std::string& operation, int sockfd,
                                const struct sockaddr* sa, socklen_t salen,
                                unsigned count) {
@@ -291,7 +239,7 @@ static void log_net_recv_event(const std::string& operation, int sockfd,
           + R"(})";
     add_operation(operation, ts, json);
 }
-
+*/
 static std::string get_env_variables_string() {
     const std::unordered_set<std::string> exclude = {"_", "SHLVL"};
     std::queue<std::pair<std::string, std::string>> env_variables
@@ -329,7 +277,6 @@ static std::string get_env_variables_string() {
 
 static void log_process_start() {
     std::string ts = now_ns();
-    // std::string slurmd_nodename = get_env("SLURMD_NODENAME");
     std::string slurmd_nodename = "node1";
     pid_t pid = getpid();
     pid_t ppid = getppid();
@@ -351,7 +298,27 @@ static void log_process_end() {
     add_operation(operation, ts, json);
 }
 
-static void save_events_clean() {
+bool get_after_failed_execv(void) {
+    return atomic_load_explicit(&after_failed_execv, memory_order_relaxed);
+}
+
+struct ProvSaveData {
+    std::string path_write;
+    std::string all_events;
+};
+
+uint64_t random_id() {
+    static thread_local std::mt19937_64 gen{std::random_device{}()};
+    static thread_local std::uniform_int_distribution<uint64_t> dist;
+    return dist(gen);
+}
+
+ProvSaveData prepare_save_events() {
+    // std::ifstream file("/etc/machine-id");
+    std::string nodename = std::to_string(random_id());
+    // std::getline(file, nodename);
+    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
+                             + std::to_string(getpid()) + ".jsonl";
     std::string all_events;
     size_t total_size = 0;
     for (const auto& event : aggregated_events) {
@@ -361,15 +328,58 @@ static void save_events_clean() {
     for (const auto& event : aggregated_events) {
         all_events.append(event.data(), event.size());
     }
-    // std::string slurmd_nodename = get_env("SLURMD_NODENAME");
-    std::string slurmd_nodename = "node1";
-    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + slurmd_nodename
-                             + "_" + std::to_string(getpid()) + ".jsonl";
+    aggregated_events.clear();
+    return ProvSaveData{std::move(path_write), std::move(all_events)};
+}
+
+void save_events_clean(ProvSaveData& prov_save_data) {
+    std::string path_write = std::move(prov_save_data.path_write);
     int fd = syscall(SYS_open, path_write.c_str(),
                      O_WRONLY | O_CREAT | O_APPEND, 0644);
+    std::string all_events = std::move(prov_save_data.all_events);
     if (fd >= 0) {
         syscall(SYS_write, fd, all_events.data(), all_events.size());
         syscall(SYS_close, fd);
+    }
+}
+
+off_t find_trunc_pos_remove_last_line(int fd) {
+    off_t end = (off_t)syscall(SYS_lseek, fd, 0, SEEK_END);
+    const size_t CHUNK = 4096;
+    char buf[CHUNK];
+    off_t pos = end;
+    while (pos > 0) {
+        size_t to_read = (pos >= (off_t)CHUNK) ? CHUNK : (size_t)pos;
+        pos -= (off_t)to_read;
+        ssize_t r = (ssize_t)syscall(SYS_read, fd, buf, to_read);
+        for (ssize_t i = r - 1; i >= 0; --i) {
+            if (buf[i] == '\n') {
+                return pos + i + 1;
+            }
+        }
+    }
+    return pos;
+}
+
+void append_events_clean(ProvSaveData& prov_save_data) {
+    std::string path_write = std::move(prov_save_data.path_write);
+    std::string all_events = std::move(prov_save_data.all_events);
+    int fd = (int)syscall(SYS_open, path_write.c_str(), O_RDWR, 0644);
+    if (fd < 0) return;
+    off_t trunc_pos = find_trunc_pos_remove_last_line(fd);
+    syscall(SYS_ftruncate, fd, trunc_pos);
+    syscall(SYS_lseek, fd, 0, SEEK_END);
+    syscall(SYS_write, fd, all_events.data(), all_events.size());
+    syscall(SYS_close, fd);
+}
+
+void run_destructor_code() {
+    log_process_end();
+    ProvSaveData prov_save_data = prepare_save_events();
+    if (!get_after_failed_execv()) {
+        save_events_clean(prov_save_data);
+    } else {
+        append_events_clean(prov_save_data);
     }
 }
 
@@ -378,8 +388,7 @@ __attribute__((constructor)) static void preload_init(void) {
 }
 
 __attribute__((destructor)) static void preload_fini(void) {
-    log_process_end();
-    save_events_clean();
+    run_destructor_code();
 }
 
 static inline const struct sockaddr* msg_name_sa(const struct msghdr* msg,
@@ -395,6 +404,10 @@ static inline const struct sockaddr* mmsg0_name_sa(const struct mmsghdr* vec,
     if (!vec || vlen == 0) return nullptr;
     if (len_out) *len_out = vec[0].msg_hdr.msg_namelen;
     return (const struct sockaddr*)vec[0].msg_hdr.msg_name;
+}
+
+static inline void set_after_failed_execv_true(void) {
+    atomic_store_explicit(&after_failed_execv, true, memory_order_relaxed);
 }
 
 extern "C" {
@@ -415,7 +428,7 @@ ssize_t write(int fd, const void* buf, size_t count) {
     RESOLVE_REAL(real_write, "__libc_write", "write", (ssize_t)-1);
     ssize_t ret = real_write(fd, buf, count);
     SAVE_ERRNO;
-    log_output_event_fd("WRITE", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -426,7 +439,7 @@ size_t fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
     size_t ret = real_fwrite(ptr, size, nmemb, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FWRITE", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -436,7 +449,7 @@ ssize_t writev(int fd, const struct iovec* iov, int iovcnt) {
     RESOLVE_REAL(real_writev, "__libc_writev", "writev", (ssize_t)-1);
     ssize_t ret = real_writev(fd, iov, iovcnt);
     SAVE_ERRNO;
-    log_output_event_fd("WRITEV", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -446,7 +459,7 @@ ssize_t pwrite(int fd, const void* buf, size_t count, off_t offset) {
     RESOLVE_REAL(real_pwrite, "__libc_pwrite", "pwrite", (ssize_t)-1);
     ssize_t ret = real_pwrite(fd, buf, count, offset);
     SAVE_ERRNO;
-    log_output_event_fd("PWRITE", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -456,7 +469,7 @@ ssize_t pwrite64(int fd, const void* buf, size_t count, off64_t offset) {
     RESOLVE_REAL(real_pwrite64, "__libc_pwrite64", "pwrite64", (ssize_t)-1);
     ssize_t ret = real_pwrite64(fd, buf, count, offset);
     SAVE_ERRNO;
-    log_output_event_fd("PWRITE64", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -466,7 +479,7 @@ int fputs(const char* s, FILE* stream) {
     int ret = real_fputs(s, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FPUTS", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -479,7 +492,7 @@ int fprintf(FILE* stream, const char* fmt, ...) {
     va_end(ap);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FPRINTF", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -489,7 +502,7 @@ int vfprintf(FILE* stream, const char* fmt, va_list ap) {
     int ret = real_vfprintf(stream, fmt, ap);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("VFPRINTF", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -501,7 +514,7 @@ int dprintf(int fd, const char* fmt, ...) {
     int ret = real_vdprintf(fd, fmt, ap);
     va_end(ap);
     SAVE_ERRNO;
-    log_output_event_fd("DPRINTF", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -510,7 +523,7 @@ int vdprintf(int fd, const char* fmt, va_list ap) {
     RESOLVE_REAL(real_vdprintf, "__libc_vdprintf", "vdprintf", -1);
     int ret = real_vdprintf(fd, fmt, ap);
     SAVE_ERRNO;
-    log_output_event_fd("VDPRINTF", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -520,7 +533,7 @@ int fputc(int c, FILE* stream) {
     int ret = real_fputc(c, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FPUTC", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -531,7 +544,7 @@ int fputs_unlocked(const char* s, FILE* stream) {
     int ret = real_fputs_unlocked(s, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FPUTS_UNLOCKED", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -544,7 +557,7 @@ size_t fwrite_unlocked(const void* ptr, size_t size, size_t nmemb,
     size_t ret = real_fwrite_unlocked(ptr, size, nmemb, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_output_event_fd("FWRITE_UNLOCKED", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -554,7 +567,7 @@ ssize_t pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
     RESOLVE_REAL(real_pwritev, "__libc_pwritev", "pwritev", (ssize_t)-1);
     ssize_t ret = real_pwritev(fd, iov, iovcnt, offset);
     SAVE_ERRNO;
-    log_output_event_fd("PWRITEV", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -565,12 +578,12 @@ ssize_t pwritev2(int fd, const struct iovec* iov, int iovcnt, off_t offset,
     RESOLVE_REAL(real_pwritev2, "__libc_pwritev2", "pwritev2", (ssize_t)-1);
     ssize_t ret = real_pwritev2(fd, iov, iovcnt, offset, flags);
     SAVE_ERRNO;
-    log_output_event_fd("PWRITEV2", fd);
+    log_write_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
 // --------------- SEND HOOKS -----------------
-ssize_t sendto(int sockfd, const void* buf, size_t len, int flags,
+/*ssize_t sendto(int sockfd, const void* buf, size_t len, int flags,
                const struct sockaddr* dest_addr, socklen_t addrlen) {
     static auto real_sendto
         = (ssize_t (*)(int, const void*, size_t, int, const struct sockaddr*,
@@ -578,7 +591,7 @@ ssize_t sendto(int sockfd, const void* buf, size_t len, int flags,
     RESOLVE_REAL(real_sendto, "__libc_sendto", "sendto", (ssize_t)-1);
     ssize_t ret = real_sendto(sockfd, buf, len, flags, dest_addr, addrlen);
     SAVE_ERRNO;
-    log_net_send_event("SENDTO", sockfd, dest_addr, addrlen, 1);
+    log_net_send_event("WRITE", sockfd, dest_addr, addrlen, 1);
     RESTORE_ERRNO;
     return ret;
 }
@@ -590,7 +603,7 @@ ssize_t sendmsg(int sockfd, const struct msghdr* msg, int flags) {
     SAVE_ERRNO;
     socklen_t alen = 0;
     const struct sockaddr* sa = msg_name_sa(msg, &alen);
-    log_net_send_event("SENDMSG", sockfd, sa, alen, 1);
+    log_net_send_event("WRITE", sockfd, sa, alen, 1);
     RESTORE_ERRNO;
     return ret;
 }
@@ -602,16 +615,16 @@ int sendmmsg(int sockfd, struct mmsghdr* msgvec, unsigned int vlen, int flags) {
     SAVE_ERRNO;
     socklen_t alen = 0;
     const struct sockaddr* sa = mmsg0_name_sa(msgvec, vlen, &alen);
-    log_net_send_event("SENDMMSG", sockfd, sa, alen, vlen);
+    log_net_send_event("WRITE", sockfd, sa, alen, vlen);
     RESTORE_ERRNO;
     return ret;
-}
+}*/
 ssize_t sendfile(int out_fd, int in_fd, off_t* offset, size_t count) {
     static auto real_sendfile = (ssize_t (*)(int, int, off_t*, size_t)) nullptr;
     RESOLVE_REAL(real_sendfile, "__libc_sendfile", "sendfile", (ssize_t)-1);
     ssize_t ret = real_sendfile(out_fd, in_fd, offset, count);
     SAVE_ERRNO;
-    log_input_output_event_fd("SENDFILE", in_fd, out_fd);
+    log_transfer_fd(in_fd, out_fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -622,10 +635,11 @@ ssize_t sendfile64(int out_fd, int in_fd, off64_t* offset, size_t count) {
                  (ssize_t)-1);
     ssize_t ret = real_sendfile64(out_fd, in_fd, offset, count);
     SAVE_ERRNO;
-    log_input_output_event_fd("SENDFILE64", in_fd, out_fd);
+    log_transfer_fd(in_fd, out_fd);
     RESTORE_ERRNO;
     return ret;
 }
+
 ssize_t copy_file_range(int fd_in, off64_t* off_in, int fd_out,
                         off64_t* off_out, size_t len, unsigned int flags) {
     static auto real_copy_file_range = (ssize_t (*)(
@@ -635,7 +649,7 @@ ssize_t copy_file_range(int fd_in, off64_t* off_in, int fd_out,
     ssize_t ret
         = real_copy_file_range(fd_in, off_in, fd_out, off_out, len, flags);
     SAVE_ERRNO;
-    log_input_output_event_fd("COPY_FILE_RANGE", fd_in, fd_out);
+    log_transfer_fd(fd_in, fd_out);
     RESTORE_ERRNO;
     return ret;
 }
@@ -646,7 +660,7 @@ ssize_t splice(int fd_in, off64_t* off_in, int fd_out, off64_t* off_out,
     RESOLVE_REAL(real_splice, "__libc_splice", "splice", (ssize_t)-1);
     ssize_t ret = real_splice(fd_in, off_in, fd_out, off_out, len, flags);
     SAVE_ERRNO;
-    log_input_output_event_fd("SPLICE", fd_in, fd_out);
+    log_transfer_fd(fd_in, fd_out);
     RESTORE_ERRNO;
     return ret;
 }
@@ -656,7 +670,7 @@ ssize_t read(int fd, void* buf, size_t count) {
     RESOLVE_REAL(real_read, "__libc_read", "read", (ssize_t)-1);
     ssize_t ret = real_read(fd, buf, count);
     SAVE_ERRNO;
-    log_input_event_fd("READ", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -665,7 +679,7 @@ ssize_t pread(int fd, void* buf, size_t count, off_t offset) {
     RESOLVE_REAL(real_pread, "__libc_pread", "pread", (ssize_t)-1);
     ssize_t ret = real_pread(fd, buf, count, offset);
     SAVE_ERRNO;
-    log_input_event_fd("PREAD", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -675,7 +689,7 @@ ssize_t pread64(int fd, void* buf, size_t count, off64_t offset) {
     RESOLVE_REAL(real_pread64, "__libc_pread64", "pread64", (ssize_t)-1);
     ssize_t ret = real_pread64(fd, buf, count, offset);
     SAVE_ERRNO;
-    log_input_event_fd("PREAD64", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -685,7 +699,7 @@ ssize_t readv(int fd, const struct iovec* iov, int iovcnt) {
     RESOLVE_REAL(real_readv, "__libc_readv", "readv", (ssize_t)-1);
     ssize_t ret = real_readv(fd, iov, iovcnt);
     SAVE_ERRNO;
-    log_input_event_fd("READV", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -695,7 +709,7 @@ ssize_t preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
     RESOLVE_REAL(real_preadv, "__libc_preadv", "preadv", (ssize_t)-1);
     ssize_t ret = real_preadv(fd, iov, iovcnt, offset);
     SAVE_ERRNO;
-    log_input_event_fd("PREADV", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -706,10 +720,11 @@ ssize_t preadv2(int fd, const struct iovec* iov, int iovcnt, off_t offset,
     RESOLVE_REAL(real_preadv2, "__libc_preadv2", "preadv2", (ssize_t)-1);
     ssize_t ret = real_preadv2(fd, iov, iovcnt, offset, flags);
     SAVE_ERRNO;
-    log_input_event_fd("PREADV2", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
+/*
 ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags,
                  struct sockaddr* src_addr, socklen_t* addrlen) {
     static auto real_recvfrom = (ssize_t (*)(
@@ -717,8 +732,7 @@ ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags,
     RESOLVE_REAL(real_recvfrom, "__libc_recvfrom", "recvfrom", (ssize_t)-1);
     ssize_t ret = real_recvfrom(sockfd, buf, len, flags, src_addr, addrlen);
     SAVE_ERRNO;
-    log_net_recv_event("RECVFROM", sockfd, src_addr, (addrlen ? *addrlen : 0),
-                       1);
+    log_net_recv_event("READ", sockfd, src_addr, (addrlen ? *addrlen : 0), 1);
     RESTORE_ERRNO;
     return ret;
 }
@@ -729,7 +743,7 @@ ssize_t recvmsg(int sockfd, struct msghdr* msg, int flags) {
     SAVE_ERRNO;
     socklen_t alen = 0;
     const struct sockaddr* sa = msg_name_sa(msg, &alen);
-    log_net_recv_event("RECVMSG", sockfd, sa, alen, 1);
+    log_net_recv_event("READ", sockfd, sa, alen, 1);
     RESTORE_ERRNO;
     return ret;
 }
@@ -742,17 +756,17 @@ int recvmmsg(int sockfd, struct mmsghdr* msgvec, unsigned int vlen, int flags,
     SAVE_ERRNO;
     socklen_t alen = 0;
     const struct sockaddr* sa = mmsg0_name_sa(msgvec, vlen, &alen);
-    log_net_recv_event("RECVMMSG", sockfd, sa, alen, vlen);
+    log_net_recv_event("READ", sockfd, sa, alen, vlen);
     RESTORE_ERRNO;
     return ret;
-}
+}*/
 int getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count) {
     static auto real_getdents
         = (int (*)(unsigned int, struct linux_dirent*, unsigned int)) nullptr;
     RESOLVE_REAL(real_getdents, "__libc_getdents", "getdents", -1);
     int ret = real_getdents(fd, dirp, count);
     SAVE_ERRNO;
-    log_input_event_fd("GETDENTS", (int)fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -763,7 +777,7 @@ int getdents64(unsigned int fd, struct linux_dirent64* dirp,
     RESOLVE_REAL(real_getdents64, "__libc_getdents64", "getdents64", -1);
     int ret = real_getdents64(fd, dirp, count);
     SAVE_ERRNO;
-    log_input_event_fd("GETDENTS64", (int)fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -773,7 +787,7 @@ size_t fread(void* ptr, size_t size, size_t nmemb, FILE* stream) {
     size_t ret = real_fread(ptr, size, nmemb, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_input_event_fd("FREAD", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -783,7 +797,7 @@ char* fgets(char* s, int size, FILE* stream) {
     char* ret = real_fgets(s, size, stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_input_event_fd("FGETS", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -793,7 +807,7 @@ int fgetc(FILE* stream) {
     int ret = real_fgetc(stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_input_event_fd("FGETC", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -803,19 +817,21 @@ int getc(FILE* stream) {
     int ret = real_getc(stream);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_input_event_fd("GETC", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
+/*
 int getchar(void) {
     static auto real_getchar = (int (*)(void)) nullptr;
     RESOLVE_REAL(real_getchar, "__libc_getchar", "getchar", EOF);
     int ret = real_getchar();
     SAVE_ERRNO;
-    log_input_event("GETCHAR", "");
+    log_unlink("READ", "");
     RESTORE_ERRNO;
     return ret;
 }
+*/
 int fscanf(FILE* stream, const char* format, ...) {
     static auto real_fscanf = (int (*)(FILE*, const char*, ...)) nullptr;
     RESOLVE_REAL(real_fscanf, "__libc_fscanf", "fscanf", -1);
@@ -825,10 +841,11 @@ int fscanf(FILE* stream, const char* format, ...) {
     va_end(ap);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
-    log_input_event_fd("FSCANF", fd);
+    log_read_fd(fd);
     RESTORE_ERRNO;
     return ret;
 }
+/*
 int scanf(const char* format, ...) {
     static auto real_scanf = (int (*)(const char*, ...)) nullptr;
     RESOLVE_REAL(real_scanf, "__libc_scanf", "scanf", -1);
@@ -837,7 +854,7 @@ int scanf(const char* format, ...) {
     int ret = real_scanf(format, ap);
     va_end(ap);
     SAVE_ERRNO;
-    log_input_event("SCANF", "");
+    log_unlink("READ", "");
     RESTORE_ERRNO;
     return ret;
 }
@@ -849,7 +866,7 @@ int sscanf(const char* s, const char* format, ...) {
     int ret = real_sscanf(s, format, ap);
     va_end(ap);
     SAVE_ERRNO;
-    log_input_event("SSCANF", "");
+    log_unlink("READ", "");
     RESTORE_ERRNO;
     return ret;
 }
@@ -859,70 +876,100 @@ int vsscanf(const char* s, const char* format, va_list ap) {
     RESOLVE_REAL(real_vsscanf, "__libc_vsscanf", "vsscanf", -1);
     int ret = real_vsscanf(s, format, ap);
     SAVE_ERRNO;
-    log_input_event("VSSCANF", "");
+    log_unlink("READ", "");
     RESTORE_ERRNO;
     return ret;
 }
+*/
 // --------------------- EXEC HOOKS -----------------------
 int execve(const char* pathname, char* const argv[], char* const envp[]) {
     static auto real_execve
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
-    log_exec_event("EXECVE", pathname ? pathname : "");
-    int rc = real_execve(pathname, argv, envp);
-    if (rc < 0)
-        log_exec_fail_event("EXECVE_FAIL", pathname ? pathname : "", errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_execve(pathname, argv, envp);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execveat(int dirfd, const char* pathname, char* const argv[],
              char* const envp[], int flags) {
     static auto real_execveat = (int (*)(int, const char*, char* const[],
                                          char* const[], int)) nullptr;
     RESOLVE_REAL(real_execveat, "__libc_execveat", "execveat", -1);
-    log_exec_event("EXECVEAT", pathname ? pathname : "");
-    int rc = real_execveat(dirfd, pathname, argv, envp, flags);
-    if (rc < 0)
-        log_exec_fail_event("EXECVEAT_FAIL", pathname ? pathname : "", errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_execveat(dirfd, pathname, argv, envp, flags);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int fexecve(int fd, char* const argv[], char* const envp[]) {
     static auto real_fexecve
         = (int (*)(int, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_fexecve, "__libc_fexecve", "fexecve", -1);
-    log_exec_fd_event("FEXECVE", fd);
-    int rc = real_fexecve(fd, argv, envp);
-    if (rc < 0) log_exec_fail_event("FEXECVE_FAIL", fd_path(fd), errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_fexecve(fd, argv, envp);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execv(const char* path, char* const argv[]) {
     static auto real_execv = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execv, "__libc_execv", "execv", -1);
-    log_exec_event("EXECV", path ? path : "");
-    int rc = real_execv(path, argv);
-    if (rc < 0) log_exec_fail_event("EXECV_FAIL", path ? path : "", errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_execv(path, argv);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execvp(const char* file, char* const argv[]) {
     static auto real_execvp = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execvp, "__libc_execvp", "execvp", -1);
-    log_exec_event("EXECPVP", file ? file : "");
-    int rc = real_execvp(file, argv);
-    if (rc < 0) log_exec_fail_event("EXECPVP_FAIL", file ? file : "", errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_execvp(file, argv);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execvpe(const char* file, char* const argv[], char* const envp[]) {
     static auto real_execvpe
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execvpe, "__libc_execvpe", "execvpe", -1);
-    log_exec_event("EXECPVE", file ? file : "");
-    int rc = real_execvpe(file, argv, envp);
-    if (rc < 0) log_exec_fail_event("EXECPVE_FAIL", file ? file : "", errno);
-    return rc;
+    log_exec();
+    run_destructor_code();
+    real_execvpe(file, argv, envp);
+    int e = errno;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execl(const char* path, const char* arg, ...) {
     static auto real_execv = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execv, "__libc_execv", "execv", -1);
-    log_exec_event("EXECL", path ? path : "");
+    log_exec();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -931,15 +978,20 @@ int execl(const char* path, const char* arg, ...) {
         errno = ENOMEM;
         return -1;
     }
-    int rc = real_execv(path, argv);
-    if (rc < 0) log_exec_fail_event("EXECL_FAIL", path ? path : "", errno);
+    real_execv(path, argv);
+    int e = errno;
     free(argv);
-    return rc;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execlp(const char* file, const char* arg, ...) {
     static auto real_execvp = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execvp, "__libc_execvp", "execvp", -1);
-    log_exec_event("EXECLP", file ? file : "");
+    log_exec();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -948,16 +1000,21 @@ int execlp(const char* file, const char* arg, ...) {
         errno = ENOMEM;
         return -1;
     }
-    int rc = real_execvp(file, argv);
-    if (rc < 0) log_exec_fail_event("EXECLP_FAIL", file ? file : "", errno);
+    real_execvp(file, argv);
+    int e = errno;
     free(argv);
-    return rc;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
+
 int execle(const char* path, const char* arg, ...) {
     static auto real_execve
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
-    log_exec_event("EXECLE", path ? path : "");
+    log_exec();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -967,12 +1024,15 @@ int execle(const char* path, const char* arg, ...) {
         errno = ENOMEM;
         return -1;
     }
-    int rc = real_execve(path, argv, (char* const*)envp);
-    if (rc < 0) log_exec_fail_event("EXECLE_FAIL", path ? path : "", errno);
+    real_execve(path, argv, (char* const*)envp);
+    int e = errno;
     free(argv);
-    return rc;
+    set_after_failed_execv_true();
+    log_exec_fail();
+    errno = e;
+    return -1;
 }
-int posix_spawn(pid_t* pid, const char* path,
+/*int posix_spawn(pid_t* pid, const char* path,
                 const posix_spawn_file_actions_t* file_actions,
                 const posix_spawnattr_t* attrp, char* const argv[],
                 char* const envp[]) {
@@ -1003,7 +1063,7 @@ int posix_spawnp(pid_t* pid, const char* file,
 int system(const char* command) {
     static auto real_system = (int (*)(const char*)) nullptr;
     RESOLVE_REAL(real_system, "__libc_system", "system", -1);
-    log_input_event("SYSTEM", command ? command : "");
+    log_unlink("SYSTEM", command ? command : "");
     return real_system(command);
 }
 pid_t fork(void) {
@@ -1028,14 +1088,14 @@ pid_t vfork(void) {
     }
     return cpid;
 }
+*/
 // --------------------- RENAME HOOKS -----------------------
 int rename(const char* oldpath, const char* newpath) {
     static auto real_rename = (int (*)(const char*, const char*)) nullptr;
     RESOLVE_REAL(real_rename, "__libc_rename", "rename", -1);
     int rc = real_rename(oldpath, newpath);
     SAVE_ERRNO;
-    log_input_output_event("RENAME", oldpath ? oldpath : "",
-                           newpath ? newpath : "");
+    log_rename(oldpath ? oldpath : "", newpath ? newpath : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1046,8 +1106,7 @@ int renameat(int olddirfd, const char* oldpath, int newdirfd,
     RESOLVE_REAL(real_renameat, "__libc_renameat", "renameat", -1);
     int rc = real_renameat(olddirfd, oldpath, newdirfd, newpath);
     SAVE_ERRNO;
-    log_input_output_event("RENAMEAT", oldpath ? oldpath : "",
-                           newpath ? newpath : "");
+    log_rename(oldpath ? oldpath : "", newpath ? newpath : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1058,11 +1117,11 @@ int renameat2(int olddirfd, const char* oldpath, int newdirfd,
     RESOLVE_REAL(real_renameat2, "__libc_renameat2", "renameat2", -1);
     int rc = real_renameat2(olddirfd, oldpath, newdirfd, newpath, flags);
     SAVE_ERRNO;
-    log_input_output_event("RENAMEAT2", oldpath ? oldpath : "",
-                           newpath ? newpath : "");
+    log_rename(oldpath ? oldpath : "", newpath ? newpath : "");
     RESTORE_ERRNO;
     return rc;
 }
+/*
 int clone(int (*fn)(void*), void* stack, int flags, void* arg, ...) {
     static auto real_clone
         = (int (*)(int (*)(void*), void*, int, void*, ...)) nullptr;
@@ -1108,8 +1167,9 @@ void _Exit(int status) {
     }
     syscall(SYS_exit, status);
     __builtin_unreachable();
-}
+}*/
 // --------------------- OPEN/CLOSE/DUP/PIPE HOOKS ------------------
+/*
 int open(const char* pathname, int flags, ...) {
     static auto real_open = (int (*)(const char*, int, ...)) nullptr;
     RESOLVE_REAL(real_open, "__libc_open", "open", -1);
@@ -1183,7 +1243,7 @@ int close(int fd) {
     std::string in = fd_path(fd);
     int rc = real_close(fd);
     SAVE_ERRNO;
-    log_input_event("CLOSE", in);
+    log_unlink("CLOSE", in);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1204,7 +1264,7 @@ int fclose(FILE* stream) {
     std::string in = fd_path(fd);
     int rc = real_fclose(stream);
     SAVE_ERRNO;
-    log_input_event("FCLOSE", in);
+    log_unlink("FCLOSE", in);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1213,7 +1273,7 @@ int pipe(int pipefd[2]) {
     RESOLVE_REAL(real_pipe, "__libc_pipe", "pipe", -1);
     int rc = real_pipe(pipefd);
     SAVE_ERRNO;
-    if (rc == 0) log_input_output_event_fd("PIPE", pipefd[0], pipefd[1]);
+    if (rc == 0) log_transfer_fd("PIPE", pipefd[0], pipefd[1]);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1222,7 +1282,7 @@ int pipe2(int pipefd[2], int flags) {
     RESOLVE_REAL(real_pipe2, "__libc_pipe2", "pipe2", -1);
     int rc = real_pipe2(pipefd, flags);
     SAVE_ERRNO;
-    if (rc == 0) log_input_output_event_fd("PIPE2", pipefd[0], pipefd[1]);
+    if (rc == 0) log_transfer_fd("PIPE2", pipefd[0], pipefd[1]);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1231,7 +1291,7 @@ int dup(int oldfd) {
     RESOLVE_REAL(real_dup, "__libc_dup", "dup", -1);
     int newfd = real_dup(oldfd);
     SAVE_ERRNO;
-    log_input_output_event_fd("DUP", oldfd, newfd);
+    log_transfer_fd("DUP", oldfd, newfd);
     RESTORE_ERRNO;
     return newfd;
 }
@@ -1240,7 +1300,7 @@ int dup2(int oldfd, int newfd) {
     RESOLVE_REAL(real_dup2, "__libc_dup2", "dup2", -1);
     int rc = real_dup2(oldfd, newfd);
     SAVE_ERRNO;
-    log_input_output_event_fd("DUP2", oldfd, rc >= 0 ? rc : newfd);
+    log_transfer_fd("DUP2", oldfd, rc >= 0 ? rc : newfd);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1249,11 +1309,12 @@ int dup3(int oldfd, int newfd, int flags) {
     RESOLVE_REAL(real_dup3, "__libc_dup3", "dup3", -1);
     int rc = real_dup3(oldfd, newfd, flags);
     SAVE_ERRNO;
-    log_input_output_event_fd("DUP3", oldfd, rc >= 0 ? rc : newfd);
+    log_transfer_fd("DUP3", oldfd, rc >= 0 ? rc : newfd);
     RESTORE_ERRNO;
     return rc;
-}
+}*/
 // ------------------- MMAP/MUNMAP/MSYNC HOOKS ----------------
+/*
 void* mmap(void* addr, size_t length, int prot, int flags, int fd,
            off_t offset) {
     static auto real_mmap
@@ -1261,7 +1322,7 @@ void* mmap(void* addr, size_t length, int prot, int flags, int fd,
     RESOLVE_REAL(real_mmap, "__libc_mmap", "mmap", MAP_FAILED);
     void* ret = real_mmap(addr, length, prot, flags, fd, offset);
     SAVE_ERRNO;
-    log_input_event_fd("MMAP", fd);
+    log_read_fd("MMAP", fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -1272,7 +1333,7 @@ void* mmap64(void* addr, size_t length, int prot, int flags, int fd,
     RESOLVE_REAL(real_mmap64, "__libc_mmap64", "mmap64", MAP_FAILED);
     void* ret = real_mmap64(addr, length, prot, flags, fd, offset);
     SAVE_ERRNO;
-    log_input_event_fd("MMAP64", fd);
+    log_read_fd("MMAP64", fd);
     RESTORE_ERRNO;
     return ret;
 }
@@ -1281,7 +1342,7 @@ int munmap(void* addr, size_t length) {
     RESOLVE_REAL(real_munmap, "__libc_munmap", "munmap", -1);
     int rc = real_munmap(addr, length);
     SAVE_ERRNO;
-    log_input_event("MUNMAP", "");
+    log_unlink("MUNMAP", "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1290,7 +1351,7 @@ int msync(void* addr, size_t length, int flags) {
     RESOLVE_REAL(real_msync, "__libc_msync", "msync", -1);
     int rc = real_msync(addr, length, flags);
     SAVE_ERRNO;
-    log_input_event("MSYNC", "");
+    log_unlink("MSYNC", "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1321,13 +1382,15 @@ int mincore(void* addr, size_t len, unsigned char* vec) {
     RESTORE_ERRNO;
     return rc;
 }
+*/
 // ------------------- SIZE/SPACE METADATA HOOKS ----------------
+/*
 int ftruncate(int fd, off_t length) {
     static auto real_ftruncate = (int (*)(int, off_t)) nullptr;
     RESOLVE_REAL(real_ftruncate, "__libc_ftruncate", "ftruncate", -1);
     int rc = real_ftruncate(fd, length);
     SAVE_ERRNO;
-    log_output_event_fd("FTRUNCATE", fd);
+    log_write_fd("FTRUNCATE", fd);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1346,7 +1409,7 @@ int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
                  -1);
     int rc = real_posix_fadvise(fd, offset, len, advice);
     SAVE_ERRNO;
-    log_output_event_fd("POSIX_FADVISE", fd);
+    log_write_fd("POSIX_FADVISE", fd);
     RESTORE_ERRNO;
     return rc;
 }
@@ -1356,17 +1419,17 @@ int posix_fallocate(int fd, off_t offset, off_t len) {
                  "posix_fallocate", -1);
     int rc = real_posix_fallocate(fd, offset, len);
     SAVE_ERRNO;
-    log_output_event_fd("POSIX_FALLOCATE", fd);
+    log_write_fd("POSIX_FALLOCATE", fd);
     RESTORE_ERRNO;
     return rc;
-}
+}*/
 //--------------- METADATA HOOKS -------------------------
-int link(const char* oldpath, const char* newpath) {
+/*int link(const char* oldpath, const char* newpath) {
     static auto real_link = (int (*)(const char*, const char*)) nullptr;
     RESOLVE_REAL(real_link, "__libc_link", "link", -1);
     int rc = real_link(oldpath, newpath);
     SAVE_ERRNO;
-    log_input_output_event("LINK", oldpath ? oldpath : "",
+    log_rename("LINK", oldpath ? oldpath : "",
                            newpath ? newpath : "");
     RESTORE_ERRNO;
     return rc;
@@ -1378,7 +1441,7 @@ int linkat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath,
     RESOLVE_REAL(real_linkat, "__libc_linkat", "linkat", -1);
     int rc = real_linkat(olddirfd, oldpath, newdirfd, newpath, flags);
     SAVE_ERRNO;
-    log_input_output_event("LINKAT", oldpath ? oldpath : "",
+    log_rename("LINKAT", oldpath ? oldpath : "",
                            newpath ? newpath : "");
     RESTORE_ERRNO;
     return rc;
@@ -1388,7 +1451,7 @@ int symlink(const char* target, const char* linkpath) {
     RESOLVE_REAL(real_symlink, "__libc_symlink", "symlink", -1);
     int rc = real_symlink(target, linkpath);
     SAVE_ERRNO;
-    log_input_output_event("SYMLINK", target ? target : "",
+    log_rename("SYMLINK", target ? target : "",
                            linkpath ? linkpath : "");
     RESTORE_ERRNO;
     return rc;
@@ -1399,17 +1462,17 @@ int symlinkat(const char* target, int newdirfd, const char* linkpath) {
     RESOLVE_REAL(real_symlinkat, "__libc_symlinkat", "symlinkat", -1);
     int rc = real_symlinkat(target, newdirfd, linkpath);
     SAVE_ERRNO;
-    log_input_output_event("SYMLINKAT", target ? target : "",
+    log_rename("SYMLINKAT", target ? target : "",
                            linkpath ? linkpath : "");
     RESTORE_ERRNO;
     return rc;
-}
+}*/
 int unlink(const char* pathname) {
     static auto real_unlink = (int (*)(const char*)) nullptr;
     RESOLVE_REAL(real_unlink, "__libc_unlink", "unlink", -1);
     int rc = real_unlink(pathname);
     SAVE_ERRNO;
-    log_input_event("UNLINK", pathname ? pathname : "");
+    log_unlink(pathname ? pathname : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1418,7 +1481,7 @@ int unlinkat(int dirfd, const char* pathname, int flags) {
     RESOLVE_REAL(real_unlinkat, "__libc_unlinkat", "unlinkat", -1);
     int rc = real_unlinkat(dirfd, pathname, flags);
     SAVE_ERRNO;
-    log_input_event("UNLINKAT", pathname ? pathname : "");
+    log_unlink(pathname ? pathname : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1427,7 +1490,7 @@ int remove(const char* pathname) {
     RESOLVE_REAL(real_remove, "__libc_remove", "remove", -1);
     int rc = real_remove(pathname);
     SAVE_ERRNO;
-    log_input_event("REMOVE", pathname ? pathname : "");
+    log_unlink(pathname ? pathname : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1436,7 +1499,7 @@ int rmdir(const char* pathname) {
     RESOLVE_REAL(real_rmdir, "__libc_rmdir", "rmdir", -1);
     int rc = real_rmdir(pathname);
     SAVE_ERRNO;
-    log_input_event("RMDIR", pathname ? pathname : "");
+    log_unlink(pathname ? pathname : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1445,7 +1508,7 @@ int shm_unlink(const char* name) {
     RESOLVE_REAL(real_shm_unlink, "__libc_shm_unlink", "shm_unlink", -1);
     int rc = real_shm_unlink(name);
     SAVE_ERRNO;
-    log_input_event("SHM_UNLINK", name ? name : "");
+    log_unlink(name ? name : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1454,7 +1517,7 @@ int mq_unlink(const char* name) {
     RESOLVE_REAL(real_mq_unlink, "__libc_mq_unlink", "mq_unlink", -1);
     int rc = real_mq_unlink(name);
     SAVE_ERRNO;
-    log_input_event("MQ_UNLINK", name ? name : "");
+    log_unlink(name ? name : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1463,16 +1526,17 @@ int sem_unlink(const char* name) {
     RESOLVE_REAL(real_sem_unlink, "__libc_sem_unlink", "sem_unlink", -1);
     int rc = real_sem_unlink(name);
     SAVE_ERRNO;
-    log_input_event("SEM_UNLINK", name ? name : "");
+    log_unlink(name ? name : "");
     RESTORE_ERRNO;
     return rc;
 }
+/*
 int access(const char* path, int amode) {
     static auto real_access = (int (*)(const char*, int)) nullptr;
     RESOLVE_REAL(real_access, "__libc_access", "access", -1);
     int rc = real_access(path, amode);
     SAVE_ERRNO;
-    log_input_event("ACCESS", path ? path : "");
+    log_unlink("ACCESS", path ? path : "");
     RESTORE_ERRNO;
     return rc;
 }
@@ -1503,5 +1567,5 @@ int utime(const char* path, const struct utimbuf* times) {
     log_output_event("UTIME", path ? path : "");
     RESTORE_ERRNO;
     return rc;
-}
+}*/
 }

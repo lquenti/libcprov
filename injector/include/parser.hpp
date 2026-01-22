@@ -18,4 +18,4 @@ SysOp sysop_from(std::string_view t);
 Event parse_event_object(simdjson::ondemand::object event_obj, uint64_t& pid);
 std::vector<Event> parse_jsonl_file(const std::string& path,
                                     simdjson::ondemand::parser& parser);
-std::vector<Event> parse_all_jsonl_files(const std::string& path_access);
+EventsByFile parse_all_jsonl_files(const std::string& path_access);

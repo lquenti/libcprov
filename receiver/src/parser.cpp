@@ -34,24 +34,13 @@ std::string get_array_json(simdjson::ondemand::object& obj,
 
 std::vector<std::string> parse_json_string_array(
     simdjson::ondemand::object& obj, const std::string_view& name) {
-    std::vector<std::string> json_vector;
-    auto field_res = obj.find_field_unordered(name);
-    simdjson::ondemand::array arr = field_res.value().get_array();
-    for (simdjson::ondemand::value element : arr) {
-        json_vector.push_back(std::string(element.raw_json().value()));
+    std::vector<std::string> out;
+    auto arr = obj.find_field_unordered(name).get_array().value();
+    for (simdjson::ondemand::value el : arr) {
+        std::string_view sv = el.get_string().value();
+        out.emplace_back(sv);
     }
-    return json_vector;
-}
-
-std::vector<uint64_t> parse_json_uint64_t_array(simdjson::ondemand::object& obj,
-                                                const std::string_view& name) {
-    std::vector<uint64_t> json_vector;
-    auto field_res = obj.find_field_unordered(name);
-    for (simdjson::ondemand::value element :
-         field_res.value().get_array().value()) {
-        json_vector.push_back(element.get_uint64().value());
-    }
-    return json_vector;
+    return out;
 }
 
 InjectorDataType get_injector_data_type(const std::string& type_string) {
@@ -68,21 +57,11 @@ InjectorDataType get_injector_data_type(const std::string& type_string) {
 
 OperationType get_operation_type(const std::string& operation_string) {
     OperationType result;
-    /*if (operation_string == "PROCESS_START") {
-        result = OperationType::ProcessStart;
-    }*/
     if (operation_string == "READ") {
         result = OperationType::Read;
     } else if (operation_string == "WRITE") {
         result = OperationType::Write;
-    } /*else if (operation_string == "RENAME") {
-        result = OperationType::Rename;
-    } else if (operation_string == "LINK") {
-        result = OperationType::Link;
-    } else if (operation_string == "SYMLINK") {
-        result = OperationType::Symlink;
-    }*/
-    else if (operation_string == "DELETE") {
+    } else if (operation_string == "DELETE") {
         result = OperationType::Delete;
     }
     return result;
@@ -114,53 +93,20 @@ std::unordered_map<std::string, Operations> parse_operation_map(
     return operation_map;
 }
 
-/*std::unordered_map<std::string, Operations> parse_operations(
-    ondemand::array simdjson_operations) {
-    std::vector<Operation> parsed_operations;
-    for (ondemand::value operation_value : simdjson_operations) {
-        ondemand::object simdjson_operation
-            = operation_value.get_object().value();
-        Operation operation;
-        operation.operation_type = get_operation_type(
-            get_string(simdjson_operation, "operation_type"));
-        ondemand::object operation_payload
-            = simdjson_operation["operation_payload"].get_object();
-        switch (operation.operation_type) {
-            case OperationType::Read:
-                operation.operation_payload
-                    = Read{get_string(operation_payload, "path_in")};
-                break;
-            case OperationType::Write:
-                operation.operation_payload
-                    = Write{get_string(operation_payload, "path_out")};
-                break;
-            case OperationType::Delete:
-                operation.operation_payload
-                    = Delete{get_string(operation_payload, "deleted_path")};
-                break;
-        }
-        parsed_operations.push_back(operation);
-    }
-    return parsed_operations;
-}*/
-
 ProcessMap parse_processes(ondemand::array simdjson_processes) {
     ProcessMap process_map;
-    // std::vector<Process> parsed_processes;
     for (ondemand::value process_value : simdjson_processes) {
         ondemand::object simdjson_process = process_value.get_object().value();
         Process process;
         process.process_command
             = get_string(simdjson_process, "process_command");
-        uint64_t process_hash = get_uint64(simdjson_process, "process_hash");
+        std::string process_id = get_string(simdjson_process, "process_id");
         process.env_variable_hash
             = get_uint64(simdjson_process, "env_variable_hash");
-        // process.operations
-        //     = parse_operations(simdjson_process["operations"].get_array());
         ondemand::object simdjson_operations
             = simdjson_process["operations"].get_object().value();
         process.operation_map = parse_operation_map(simdjson_operations);
-        process_map[process_hash] = process;
+        process_map[process_id] = process;
     }
     return process_map;
 }
@@ -170,11 +116,11 @@ ExecuteSetMap parse_execute_maps(ondemand::array simdjson_execute_maps) {
     for (ondemand::value execute_map_value : simdjson_execute_maps) {
         ondemand::object simdjson_execute_map
             = execute_map_value.get_object().value();
-        uint64_t parent_process_id
-            = get_uint64(simdjson_execute_map, "parent_process_id");
-        std::vector<uint64_t> child_process_ids = parse_json_uint64_t_array(
+        std::string parent_process_id
+            = get_string(simdjson_execute_map, "parent_process_id");
+        std::vector<std::string> child_process_ids = parse_json_string_array(
             simdjson_execute_map, "child_process_id_array");
-        std::unordered_set<uint64_t> child_process_ids_set(
+        std::unordered_set<std::string> child_process_ids_set(
             child_process_ids.begin(), child_process_ids.end());
         execute_set_map[parent_process_id] = child_process_ids_set;
     }
