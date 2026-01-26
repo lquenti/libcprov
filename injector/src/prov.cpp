@@ -5,41 +5,16 @@
 #include <xxhash.h>
 
 #include <CLI/CLI.hpp>
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
 #include <string>
-#include <thread>
 
 #include "data_backup.hpp"
 #include "get_job_info.hpp"
 #include "json_string_builders.hpp"
 #include "model.hpp"
 #include "parser.hpp"
+#include "process_coordinator.hpp"
 #include "processor.hpp"
-
-using namespace simdjson;
-
-void set_env_variables(const std::string& path_exec,
-                       const std::string& path_access) {
-    setenv("PROV_PATH_EXEC", path_exec.c_str(), 1);
-    setenv("PROV_PATH_WRITE", path_access.c_str(), 1);
-}
-
-void start_preload_process(const std::string& so_path, const std::string& cmd,
-                           const std::string& path_access) {
-    std::filesystem::create_directory(path_access);
-    pid_t pid = fork();
-    if (pid == 0) {
-        if (!so_path.empty()) {
-            setenv("LD_PRELOAD", so_path.c_str(), 1);
-        }
-        execl("/bin/sh", "sh", "-c", cmd.c_str(), (char*)nullptr);
-        _exit(127);
-    } else {
-        waitpid(pid, nullptr, 0);
-    }
-}
 
 ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     EventsByFile events_by_file = parse_all_jsonl_files(path_access);
@@ -47,25 +22,6 @@ ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     ProcessedInjectorData processed_injector_data
         = process_events(events_by_file);
     return processed_injector_data;
-}
-
-void send_json(const std::string& url, const std::string& header,
-               const std::string& json) {
-    CURL* curl = curl_easy_init();
-    if (!curl) return;
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    std::string payload = header + json;
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, payload.size());
-    curl_easy_setopt(
-        curl, CURLOPT_WRITEFUNCTION,
-        +[](void*, size_t s, size_t n, void*) { return s * n; });
-    curl_easy_perform(curl);
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
 }
 
 enum class Mode { Start, End, Exec };
@@ -142,7 +98,7 @@ int main(int argc, char** argv) {
                 = build_header("start", path_access, job_id, cluster_name);
             std::filesystem::create_directories(base_path);
             std::filesystem::create_directories(path_access);
-            std::filesystem::create_directories(path_access + "/injector_data");
+            std::filesystem::create_directories(path_access);
             std::string job_name = get_job_name();
             std::string username = get_username();
             StartOpts start_opts = std::get<StartOpts>(parsed.opts);
@@ -170,13 +126,13 @@ int main(int argc, char** argv) {
             backup_data_pre_exec(absolute_path_exec);
             std::string exec_json_input = exec_opts.json;
             std::string exec_command = exec_opts.command;
-            std::string injector_data_path = path_access + "/injector_data";
+            std::string injector_data_path = path_access;
             set_env_variables(absolute_path_exec, injector_data_path);
             std::string injector_path
                 = "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
                   "build/libinjector.so";
-            start_preload_process(injector_path, exec_command,
-                                  injector_data_path);
+            start_and_await_process(injector_path, exec_command,
+                                    injector_data_path);
             ProcessedInjectorData processed_injector_data
                 = extract_injector_data(injector_data_path);
             ingest_prov_data(

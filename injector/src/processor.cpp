@@ -29,26 +29,14 @@ LinuxProcessMap init_processing(EventsByFile& events_by_file) {
                     ignore_file = true;
                     break;
                 }
-                // event_recorder.log_process_start(process_start.process_name,
-                //                                  process_start.env_variables);
                 std::string env_variables = process_start.env_variables;
                 env_variables_hash
                     = XXH64(env_variables.data(), env_variables.size(), 0);
-                /*std::string hash_process_source_string
-                    = process_start.process_name
-                      + std::to_string(env_variables_hash);
-                uint64_t process_hash
-                    = XXH64(hash_process_source_string.data(),
-                            hash_process_source_string.size(), 0);*/
                 process_name = process_start.process_name;
-                // event_recorder.add_process(process_name, env_variables);
                 process_id = process_name + std::to_string(env_variables_hash);
                 linux_process = {process_start.ppid, event.ts, 0, process_id};
                 pid = process_start.pid;
                 process_start.env_variables_hash = env_variables_hash;
-                // event_recorder.add_device_process_id_to_process_hash(
-                //     event.pid, event.slurmd_nodename,
-                //     process_start.process_name, process_start.env_variables);
                 break;
             }
         }
@@ -152,18 +140,6 @@ void sort_events(std::vector<Event>& events) {
               [](const Event& a, const Event& b) { return a.ts < b.ts; });
 }
 
-/*void set_device_process_id_to_process_hash(EventRecorder& event_recorder,
-                                           const std::vector<Event>& events)
-{ for (const Event& event : events) { SysOp op = event.operation; if (op ==
-SysOp::ProcessStart) { const ProcessStart& process_start =
-std::get<ProcessStart>(event.event_payload);
-            event_recorder.add_device_process_id_to_process_hash(
-                event.pid, event.slurmd_nodename,
-process_start.process_name, process_start.env_variables);
-        }
-    }
-}*/
-
 void log_process_start(
     Event event, ProcessedExecData& processed_exec_data,
     OperationsDataBackupFormat& operations_data_backup_format) {
@@ -184,24 +160,16 @@ void log_process_start(
         operations_data_backup_format[executable]
             = BackupOperations{.read = false, .write = false, .execute = true};
     }
-    // processed_exec_data.process_map[event.process_id] =
-    // Process{process_start.process_name, process_start.env_variables_hash,
 }
-/*
-void log_write(Event event, ProcessedExecData& processed_exec_data,
-               OperationsDataBackupFormat& operations_data_backup_format) {
-    const auto& write_event = std::get<AccessOut>(event.event_payload);
-    processed_exec_data.process_map[event.process_id]
-        .operation_map[write_event.path_out]
-        .write
-        = true;
-    operations_data_backup_format[write_event.path_out].write = true;
-}*/
 
 void log_operation(const std::string& path, const std::string& process_id,
                    ProcessedExecData& processed_exec_data,
                    OperationsDataBackupFormat& operations_data_backup_format,
                    SysOp op_type) {
+    // if (path.starts_with("/dev") || path.starts_with("/proc")) {
+    if (path.starts_with("/proc")) {
+        return;
+    }
     std::string resolved_path = path;
     auto it = processed_exec_data.rename_map.find(path);
     if (it != processed_exec_data.rename_map.end()) {
@@ -246,7 +214,6 @@ void log_rename(const Event& event, ProcessedExecData& processed_exec_data) {
 };
 
 ProcessedInjectorData process_events(EventsByFile& events_by_file) {
-    // EventRecorder event_recorder;
     LinuxProcessMap linux_process_map = init_processing(events_by_file);
     std::vector<Event> events = combine_events(std::move(events_by_file));
     ExecuteSetMap execute_set_map = resolve_forks(linux_process_map, events);

@@ -13,12 +13,12 @@ set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # -------- Prov Executable --------
 add_executable(prov
     src/prov.cpp
-    #src/event_recorder.cpp
     src/parser.cpp
     src/processor.cpp
     src/json_string_builders.cpp
     src/get_job_info.cpp
     src/data_backup.cpp
+    src/process_coordinator.cpp
 )
 
 target_include_directories(prov PRIVATE
