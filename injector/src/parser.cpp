@@ -1,144 +1,200 @@
 #include "parser.hpp"
 
-#include <simdjson.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
-#include <iterator>
 #include <string>
+#include <string_view>
 #include <vector>
 
-using namespace simdjson;
+enum : uint32_t {
+    EV_PROCESS_START = 1,
+    EV_PROCESS_END = 2,
+    EV_READ = 3,
+    EV_WRITE = 4,
+    EV_TRANSFER = 5,
+    EV_RENAME = 6,
+    EV_UNLINK = 7,
+    EV_EXEC = 8,
+    EV_EXEC_FAIL = 9
+};
 
-std::string get_string(ondemand::object& obj, const char* name) {
-    simdjson_result<std::string_view> result
-        = obj.find_field_unordered(name).get_string();
-    return std::string(result.value());
+#pragma pack(push, 1)
+struct RecHdr {
+    uint32_t type;
+    uint32_t size;
+    uint64_t ts_ns;
+    int32_t pid;
+    int32_t tid;
+};
+#pragma pack(pop)
+
+static inline bool read_u32(const uint8_t* base, size_t size, size_t& pos,
+                            uint32_t& out) {
+    if (pos + sizeof(uint32_t) > size) return false;
+    memcpy(&out, base + pos, sizeof(uint32_t));
+    pos += sizeof(uint32_t);
+    return true;
 }
 
-uint64_t get_uint64(ondemand::object& obj, const char* name) {
-    simdjson_result<uint64_t> result
-        = obj.find_field_unordered(name).get_uint64();
-    return result.value();
+static inline bool read_i32(const uint8_t* base, size_t size, size_t& pos,
+                            int32_t& out) {
+    if (pos + sizeof(int32_t) > size) return false;
+    memcpy(&out, base + pos, sizeof(int32_t));
+    pos += sizeof(int32_t);
+    return true;
 }
 
-std::string get_array_json(simdjson::ondemand::object& obj,
-                           const std::string_view& name) {
-    simdjson::simdjson_result<simdjson::ondemand::value> v_res
-        = obj.find_field_unordered(name);
-    simdjson::ondemand::value v = v_res.value();
-    simdjson::simdjson_result<simdjson::ondemand::json_type> t = v.type();
-    simdjson::simdjson_result<std::string_view> raw = v.raw_json();
-    return std::string(raw.value());
+static inline bool read_str(const uint8_t* base, size_t size, size_t& pos,
+                            std::string& out) {
+    uint32_t len;
+    if (!read_u32(base, size, pos, len)) return false;
+    if (pos + len > size) return false;
+    out.assign((const char*)(base + pos), (size_t)len);
+    pos += (size_t)len;
+    return true;
 }
 
-bool one_of(std::string_view t, std::string_view a) {
-    return t == a;
-}
-template <class... Ss>
-bool one_of(std::string_view t, std::string_view a, Ss... s) {
-    return (t == a) || one_of(t, s...);
-}
-
-SysOp sysop_from(std::string_view operation_string) {
-    using O = SysOp;
-    O result;
-    if (operation_string == "PROCESS_START") {
-        result = O::ProcessStart;
-    }
-    if (operation_string == "PROCESS_END") {
-        result = O::ProcessEnd;
-    }
-    if (operation_string == "READ") {
-        result = O::Read;
-    } else if (operation_string == "WRITE") {
-        result = O::Write;
-    } else if (operation_string == "TRANSFER") {
-        result = O::Transfer;
-    } else if (operation_string == "EXEC") {
-        result = O::Exec;
-    } else if (operation_string == "EXEC_FAIL") {
-        result = O::ExecFail;
-    } else if (operation_string == "RENAME") {
-        result = O::Rename;
-    } else if (operation_string == "UNLINK") {
-        result = O::Unlink;
-    }
-    return result;
-}
-
-Event parse_event_object(ondemand::object event_obj) {
-    auto hdr_res = event_obj.find_field_unordered("event_header").get_object();
-    auto hdr = hdr_res.value();
-    uint64_t ts = get_uint64(hdr, "ts");
-    std::string op = get_string(hdr, "operation");
-    ondemand::object event_data{};
-    auto dr = event_obj.find_field_unordered("event_data").get_object();
-    event_data = dr.value();
+static inline Event event_from_record(const uint8_t* rec_base,
+                                      size_t rec_size) {
+    const RecHdr* h = (const RecHdr*)rec_base;
     EventPayload empty_payload;
-    Event new_event = {
-        .ts = ts, .operation = sysop_from(op), .event_payload = empty_payload};
-    using O = SysOp;
-    switch (new_event.operation) {
-        case O::ProcessStart: {
-            uint64_t pid = get_uint64(event_data, "pid");
-            uint64_t ppid = get_uint64(event_data, "ppid");
-            std::string process_name = get_string(event_data, "launch_command");
-            std::string env_variables
-                = get_array_json(event_data, "env_variables");
-            new_event.event_payload
-                = ProcessStart{.pid = pid,
-                               .ppid = ppid,
-                               .process_name = process_name,
-                               .env_variables = env_variables};
+    Event e{.ts = h->ts_ns,
+            .operation = SysOp::Exec,
+            .process_id = "",
+            .event_payload = empty_payload};
+    size_t pos = sizeof(RecHdr);
+    switch (h->type) {
+        case EV_PROCESS_START: {
+            e.operation = SysOp::ProcessStart;
+            int32_t pid32 = 0;
+            int32_t ppid32 = 0;
+            std::string nodename;
+            std::string launch_command;
+            std::string env_vars_json;
+            if (!read_i32(rec_base, rec_size, pos, pid32)) break;
+            if (!read_i32(rec_base, rec_size, pos, ppid32)) break;
+            if (!read_str(rec_base, rec_size, pos, nodename)) break;
+            if (!read_str(rec_base, rec_size, pos, launch_command)) break;
+            if (!read_str(rec_base, rec_size, pos, env_vars_json)) break;
+            e.event_payload
+                = ProcessStart{.pid = (uint64_t)pid32,
+                               .ppid = (uint64_t)ppid32,
+                               .process_name = std::move(launch_command),
+                               .env_variables = std::move(env_vars_json)};
             break;
         }
-        case O::ProcessEnd:
-            break;
-        case O::Write:
-        case O::Read:
-        case O::Unlink: {
-            new_event.event_payload = get_string(event_data, "path");
+        case EV_PROCESS_END: {
+            e.operation = SysOp::ProcessEnd;
             break;
         }
-        case O::Transfer:
-            new_event.event_payload
-                = Transfer{.path_read = get_string(event_data, "path_read"),
-                           .path_write = get_string(event_data, "path_write")};
+        case EV_READ: {
+            e.operation = SysOp::Read;
+            int32_t fd = -1;
+            std::string path;
+            if (!read_i32(rec_base, rec_size, pos, fd)) break;
+            if (!read_str(rec_base, rec_size, pos, path)) break;
+            e.event_payload = std::move(path);
             break;
-        case O::Rename:
-            new_event.event_payload = Rename{
-                .original_path = get_string(event_data, "original_path"),
-                .new_path = get_string(event_data, "new_path")};
+        }
+        case EV_WRITE: {
+            e.operation = SysOp::Write;
+            int32_t fd = -1;
+            std::string path;
+            if (!read_i32(rec_base, rec_size, pos, fd)) break;
+            if (!read_str(rec_base, rec_size, pos, path)) break;
+            e.event_payload = std::move(path);
             break;
-        case O::Exec:
+        }
+        case EV_UNLINK: {
+            e.operation = SysOp::Unlink;
+            std::string path;
+            if (!read_str(rec_base, rec_size, pos, path)) break;
+            e.event_payload = std::move(path);
             break;
-        case O::ExecFail:
+        }
+        case EV_TRANSFER: {
+            e.operation = SysOp::Transfer;
+            int32_t rfd = -1;
+            int32_t wfd = -1;
+            std::string path_read;
+            std::string path_write;
+            if (!read_i32(rec_base, rec_size, pos, rfd)) break;
+            if (!read_i32(rec_base, rec_size, pos, wfd)) break;
+            if (!read_str(rec_base, rec_size, pos, path_read)) break;
+            if (!read_str(rec_base, rec_size, pos, path_write)) break;
+            e.event_payload = Transfer{.path_read = std::move(path_read),
+                                       .path_write = std::move(path_write)};
             break;
+        }
+        case EV_RENAME: {
+            e.operation = SysOp::Rename;
+            std::string oldp;
+            std::string newp;
+            if (!read_str(rec_base, rec_size, pos, oldp)) break;
+            if (!read_str(rec_base, rec_size, pos, newp)) break;
+            e.event_payload = Rename{.original_path = std::move(oldp),
+                                     .new_path = std::move(newp)};
+            break;
+        }
+        case EV_EXEC: {
+            e.operation = SysOp::Exec;
+            break;
+        }
+        case EV_EXEC_FAIL: {
+            e.operation = SysOp::ExecFail;
+            break;
+        }
+        default: {
+            break;
+        }
     }
-    return new_event;
+    return e;
 }
 
-std::vector<Event> parse_jsonl_file(const std::string& path,
-                                    ondemand::parser& parser) {
+static std::vector<Event> parse_bin_file(const std::string& path) {
     std::vector<Event> events;
-    auto p_res = padded_string::load(path);
-    padded_string p = std::move(p_res.value());
-    auto stream_res = parser.iterate_many(p.data(), p.size(), size_t(1) << 20);
-    for (auto doc : *stream_res) {
-        auto obj_res = doc.get_object();
-        auto ev_opt = parse_event_object(obj_res.value());
-        events.push_back(std::move(ev_opt));
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) return events;
+    struct stat st;
+    if (fstat(fd, &st) != 0) {
+        close(fd);
+        return events;
     }
+    size_t sz = (size_t)st.st_size;
+    if (sz == 0) {
+        close(fd);
+        return events;
+    }
+    void* map = mmap(nullptr, sz, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+        close(fd);
+        return events;
+    }
+    const uint8_t* base = (const uint8_t*)map;
+    size_t off = 0;
+    while (off + sizeof(RecHdr) <= sz) {
+        const RecHdr* h = (const RecHdr*)(base + off);
+        if (h->size < sizeof(RecHdr)) break;
+        if (off + (size_t)h->size > sz) break;
+        events.push_back(event_from_record(base + off, (size_t)h->size));
+        off += (size_t)h->size;
+    }
+    munmap(map, sz);
+    close(fd);
     return events;
 }
 
 EventsByFile parse_all_jsonl_files(const std::string& path_access) {
     EventsByFile events_by_file;
-    ondemand::parser parser;
     for (const auto& entry : std::filesystem::directory_iterator(path_access)) {
-        events_by_file.push_back(
-            parse_jsonl_file(entry.path().string(), parser));
+        if (!entry.is_regular_file()) continue;
+        events_by_file.push_back(parse_bin_file(entry.path().string()));
     }
     return events_by_file;
 }

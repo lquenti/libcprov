@@ -47,7 +47,7 @@ LinuxProcessMap init_processing(EventsByFile& events_by_file) {
         for (auto it = events.rbegin(); it != events.rend(); ++it) {
             const Event& event = *it;
             SysOp op = event.operation;
-            if (op == SysOp::ProcessEnd) {
+            if (op == SysOp::ProcessEnd || op == SysOp::Exec) {
                 linux_process.end_time = event.ts;
                 break;
             }
