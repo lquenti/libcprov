@@ -192,6 +192,7 @@ static void log_exec() {
 }
 
 static void log_exec_fail() {
+    unsetenv("AFTER_EXECV");
     std::string ts = now_ns();
     std::string json = R"({})";
     add_operation("EXEC_FAIL", ts, json);
@@ -370,7 +371,6 @@ __attribute__((constructor)) static void preload_init(void) {
 }
 
 __attribute__((destructor)) static void preload_fini(void) {
-    unsetenv("AFTER_EXECV");
     run_destructor_code();
 }
 

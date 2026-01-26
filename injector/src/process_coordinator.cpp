@@ -69,7 +69,6 @@ static int pidfd_open_sys(pid_t pid, unsigned int flags) {
 static int sigpipe_fds[2] = {-1, -1};
 static int epfd = -1;
 static std::unordered_map<int, pid_t> live;
-static bool seen_any = false;
 static void set_nonblock(int fd) {
     int fl = fcntl(fd, F_GETFL, 0);
     if (fl >= 0) (void)fcntl(fd, F_SETFL, fl | O_NONBLOCK);
@@ -107,7 +106,6 @@ static void handle_new_pids_from_pipe(void) {
         pid_t pid;
         ssize_t r = read(sigpipe_fds[0], &pid, sizeof(pid));
         if (r == (ssize_t)sizeof(pid)) {
-            seen_any = true;
             int pfd = pidfd_open_sys(pid, 0);
             if (pfd >= 0) {
                 if (live.find(pfd) != live.end()) {
