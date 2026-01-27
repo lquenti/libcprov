@@ -25,10 +25,10 @@ LinuxProcessMap init_processing(EventsByFile& events_by_file) {
             if (op == SysOp::ProcessStart) {
                 ProcessStart& process_start
                     = std::get<ProcessStart>(event.event_payload);
-                if (process_start.process_name.rfind("sh -c ", 0) == 0) {
+                /*if (process_start.process_name.rfind("sh -c ", 0) == 0) {
                     ignore_file = true;
                     break;
-                }
+                }*/
                 std::string env_variables = process_start.env_variables;
                 env_variables_hash
                     = XXH64(env_variables.data(), env_variables.size(), 0);

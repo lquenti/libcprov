@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -945,5 +946,37 @@ int sem_unlink(const char* name) {
     log_unlink(name ? name : "");
     RESTORE_ERRNO;
     return rc;
+}
+// ---- EXIT HOOKS ----
+static std::atomic<int> prov_flushed{0};
+static inline void prov_flush_once(void) {
+    int expected = 0;
+    if (prov_flushed.compare_exchange_strong(expected, 1,
+                                             std::memory_order_relaxed)) {
+        log_process_end();
+        flush_buffer_to_file();
+    }
+}
+void _exit(int status) {
+    static void (*real__exit)(int) = NULL;
+    if (!real__exit) real__exit = (void (*)(int))dlsym(RTLD_NEXT, "_exit");
+    prov_flush_once();
+    real__exit(status);
+    __builtin_unreachable();
+}
+void _Exit(int status) {
+    static void (*real__Exit)(int) = NULL;
+    if (!real__Exit) real__Exit = (void (*)(int))dlsym(RTLD_NEXT, "_Exit");
+    prov_flush_once();
+    real__Exit(status);
+    __builtin_unreachable();
+}
+void quick_exit(int status) {
+    static void (*real_quick_exit)(int) = NULL;
+    if (!real_quick_exit)
+        real_quick_exit = (void (*)(int))dlsym(RTLD_NEXT, "quick_exit");
+    prov_flush_once();
+    real_quick_exit(status);
+    __builtin_unreachable();
 }
 }
