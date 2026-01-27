@@ -74,12 +74,10 @@ static inline Event event_from_record(const uint8_t* rec_base,
             e.operation = SysOp::ProcessStart;
             int32_t pid32 = 0;
             int32_t ppid32 = 0;
-            std::string nodename;
             std::string launch_command;
             std::string env_vars_json;
             if (!read_i32(rec_base, rec_size, pos, pid32)) break;
             if (!read_i32(rec_base, rec_size, pos, ppid32)) break;
-            if (!read_str(rec_base, rec_size, pos, nodename)) break;
             if (!read_str(rec_base, rec_size, pos, launch_command)) break;
             if (!read_str(rec_base, rec_size, pos, env_vars_json)) break;
             e.event_payload

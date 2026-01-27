@@ -131,8 +131,8 @@ int main(int argc, char** argv) {
             std::string injector_path
                 = "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
                   "build/libinjector.so";
-            start_and_await_process(injector_path, exec_command,
-                                    injector_data_path);
+            start_preload_process(injector_path, exec_command,
+                                  injector_data_path);
             ProcessedInjectorData processed_injector_data
                 = extract_injector_data(injector_data_path);
             ingest_prov_data(

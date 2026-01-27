@@ -85,15 +85,8 @@ static uint64_t random_id() {
     return dist(gen);
 }
 
-static long set_prov_pid() {
-    const char* env = getenv("PROV_PID");
-    char* endptr;
-    return strtol(env, &endptr, 10);
-}
-
 static atomic_bool after_failed_execv = ATOMIC_VAR_INIT(false);
 static std::string nodename = std::to_string(random_id());
-static long prov_pid = set_prov_pid();
 
 enum : uint32_t {
     EV_PROCESS_START = 1,
@@ -224,7 +217,6 @@ static void log_transfer_fd(int path_read_fd, int path_write_fd) {
 }
 
 static void log_exec() {
-    setenv("AFTER_EXECV", "true", 1);
     uint64_t ts = now_ns_u64();
     add_record(EV_EXEC, ts, [&] {});
 }
@@ -318,39 +310,7 @@ static void flush_buffer_to_file() {
     (void)syscall(SYS_close, fd);
 }
 
-static long prov_pid_from_env(void) {
-    const char* s = getenv("PROV_PID");
-    if (!s) return -1;
-    char* end = 0;
-    long v = strtol(s, &end, 10);
-    return (end && *end == '\0') ? v : -1;
-}
-
-static int prov_sig_from_env(void) {
-    const char* s = getenv("PROV_SIG");
-    if (!s || !*s) return -1;
-    char* end = nullptr;
-    long v = strtol(s, &end, 10);
-    if (!end || *end != '\0') return -1;
-    if (v <= 0 || v >= NSIG) return -1;
-    return (int)v;
-}
-
-static void notify_start() {
-    int sig = prov_sig_from_env();
-    long prov = prov_pid_from_env();
-    if (sig < 0 || prov <= 1) return;
-    union sigval v;
-    v.sival_int = (int)getpid();
-    (void)sigqueue((pid_t)prov, sig, v);
-}
-
 __attribute__((constructor)) static void preload_init(void) {
-    if (std::getenv("AFTER_EXECV") == nullptr) {
-        notify_start();
-    } else {
-        unsetenv("AFTER_EXECV");
-    }
     log_process_start();
 }
 
