@@ -464,6 +464,57 @@ JobData DB::get_job_data(uint64_t job_id, const std::string& cluster_name) {
     sqlite3_close(db);
     return out;
 }
-/*
-JobDataInterface DB::get_job_interface_data(JobsQueryOpts) {
-}*/
+
+JobInterfaceDataRows DB::get_job_interface_data(std::string user,
+                                                uint64_t before,
+                                                uint64_t after) {
+    JobInterfaceDataRows job_data_interface_rows{};
+    sqlite3* db = nullptr;
+    sqlite3_open(db_file_.c_str(), &db);
+    sqlite3_stmt* st = nullptr;
+    if (after == 0 && before == 0) {
+        sqlite3_prepare_v2(
+            db,
+            "SELECT job_id, cluster_name, job_name, username, start_time, "
+            "end_time, path, json "
+            "FROM jobs WHERE username=? AND start_time>=? AND end_time<=?;",
+            -1, &st, nullptr);
+        sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(st, 2, (sqlite3_int64)after);
+        sqlite3_bind_int64(st, 3, (sqlite3_int64)before);
+    } else if (after == 0) {
+        sqlite3_prepare_v2(
+            db,
+            "SELECT job_id, cluster_name, job_name, username, start_time, "
+            "end_time, path, json "
+            "FROM jobs WHERE username=? AND start_time>=?;",
+            -1, &st, nullptr);
+        sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(st, 2, (sqlite3_int64)after);
+    } else if (before == 0) {
+        sqlite3_prepare_v2(
+            db,
+            "SELECT job_id, cluster_name, job_name, username, start_time, "
+            "end_time, path, json "
+            "FROM jobs WHERE username=? AND end_time<=?;",
+            -1, &st, nullptr);
+        sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(st, 2, (sqlite3_int64)before);
+    }
+    JobDataInterface job_data_interface = {};
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        job_data_interface = {};
+        job_data_interface.job_id = col_u64(st, 0);
+        job_data_interface.cluster_name = col_text(st, 1);
+        job_data_interface.job_name = col_text(st, 2);
+        job_data_interface.username = col_text(st, 3);
+        job_data_interface.start_time = col_u64(st, 4);
+        job_data_interface.end_time = col_u64(st, 5);
+        job_data_interface.path = col_text(st, 6);
+        job_data_interface.json = col_text(st, 7);
+        job_data_interface_rows.push_back(job_data_interface);
+    }
+    sqlite3_finalize(st);
+    sqlite3_close(db);
+    return job_data_interface_rows;
+}

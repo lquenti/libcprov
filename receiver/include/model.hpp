@@ -183,9 +183,14 @@ struct JobDataInterface {
     std::string json;
 };
 
+using JobInterfaceDataRows = std::vector<JobDataInterface>;
+using ExecDataInterfaceRows = std::vector<ExecDataInterface>;
+using ProcessDataInterfaceRows = std::vector<ProcessDataInterface>;
+using DBOperationsRows = std::vector<DBOperations>;
+
 struct DBInterfaceData {
     RequestType request_type{};
-    std::variant<JobDataInterface, ExecDataInterface, ProcessDataInterface,
-                 DBOperations>
+    std::variant<JobInterfaceDataRows, ExecDataInterfaceRows,
+                 ProcessDataInterfaceRows, DBOperationsRows>
         db_data;
 };
