@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <omp.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -12,6 +13,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define N 512
+
 static void die(const char* msg) {
     perror(msg);
     _exit(1);
@@ -19,6 +22,29 @@ static void die(const char* msg) {
 
 static void ensure_dir(const char* path) {
     if (mkdir(path, 0777) != 0 && errno != EEXIST) die("mkdir");
+}
+
+static void test_openmp_matrix_add(const char* dir) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/openmp_matrix_add.txt", dir);
+    static double A[N][N];
+    static double B[N][N];
+    static double C[N][N];
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) {
+            A[i][j] = (double)(i + j);
+            B[i][j] = (double)(i - j);
+        }
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) C[i][j] = A[i][j] + B[i][j];
+    double sum = 0.0;
+    for (int i = 0; i < N; i++) sum += C[i][i];
+    int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (fd < 0) die("open(openmp_matrix_add)");
+    dprintf(fd, "N=%d diag_sum=%.0f threads=%d\n", N, sum,
+            omp_get_max_threads());
+    close(fd);
 }
 
 static void write_all(int fd, const void* buf, size_t n) {
@@ -136,6 +162,7 @@ int main(int argc, char** argv) {
     sleep(1);
     ensure_dir("/dev/shm");
     ensure_dir(dir);
+    test_openmp_matrix_add(dir);
     simple_file_ops(dir, "parent");
     threaded_phase(dir, 6);
     for (int i = 0; i < nchildren; i++) {

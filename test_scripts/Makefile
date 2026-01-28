@@ -28,4 +28,4 @@ test_fork_execv: test_fork_execv.c
 	gcc -o test_fork_execv test_fork_execv.c
 
 test_multithreading: test_multithreading.c
-	gcc -O2 -pthread -o test_multithreading test_multithreading.c
+	gcc -O2 -pthread -fopenmp -o test_multithreading test_multithreading.c

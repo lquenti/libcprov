@@ -1,4 +1,6 @@
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 
 #include "db.hpp"
@@ -108,4 +110,62 @@ JobData fetch_graph_db_data(ParsedGraphRequestData parsed_graph_request_data) {
     DB db = DB();
     return db.get_job_data(parsed_graph_request_data.job_id,
                            parsed_graph_request_data.cluster_name);
+}
+
+static inline uint64_t ddmmyyyy_to_ns_u64_utc(const std::string& ddmmyyyy) {
+    int day = 0, month = 0, year = 0;
+    if (std::sscanf(ddmmyyyy.c_str(), "%d.%d.%d", &day, &month, &year) != 3)
+        return 0;
+    std::chrono::year_month_day ymd{std::chrono::year{year},
+                                    std::chrono::month{(unsigned)month},
+                                    std::chrono::day{(unsigned)day}};
+    if (!ymd.ok()) return 0;
+    std::chrono::sys_days days_since_epoch{ymd};
+    std::chrono::sys_time<std::chrono::nanoseconds> time_point
+        = days_since_epoch;
+    return (uint64_t)time_point.time_since_epoch().count();
+}
+
+DBInterfaceData fetch_db_interface_db_data(
+    ParsedDBInterfaceRequestData parsed_db_interface_request_data) {
+    DBInterfaceData db_interface_data;
+    DB db = DB();
+    switch (parsed_db_interface_request_data.request_type) {
+        case (RequestType::JobsQuery): {
+            JobsQueryOpts job_query_opts = std::get<JobsQueryOpts>(
+                parsed_db_interface_request_data.opts);
+            uint64_t before_atomic_ts = 0;
+            if (job_query_opts.before) {
+                before_atomic_ts
+                    = ddmmyyyy_to_ns_u64_utc(job_query_opts.before.value());
+            }
+            uint64_t after_atomic_ts = 0;
+            if (job_query_opts.after) {
+                after_atomic_ts
+                    = ddmmyyyy_to_ns_u64_utc(job_query_opts.after.value());
+            }
+            // db_interface_data.db_data = db.get_job_interface_data(
+            //     job_query_opts.user, before_atomic_ts, after_atomic_ts);
+            break;
+        }
+        case (RequestType::ExecsQuery): {
+            ExecsQueryOpts exec_query_opts = std::get<ExecsQueryOpts>(
+                parsed_db_interface_request_data.opts);
+            // db_interface_data.db_data = db.get_execs_interface_data(
+            //     exec_query_opts.job_id, exec_query_opts.cluster);
+            break;
+        }
+        case (RequestType::ProcessesQuery): {
+            // db_interface_data.db_data
+            //     = db.get_process_interface_data(std::get<ProcessesQueryOpts>(
+            //         parsed_db_interface_request_data.opts));
+            break;
+        }
+        case (RequestType::FileQuery): {
+            // db_interface_data.db_data = db.get_files_interface_data(
+            //     std::get<FileQueryOpts>(parsed_db_interface_request_data.opts));
+            break;
+        }
+    }
+    return db_interface_data;
 }

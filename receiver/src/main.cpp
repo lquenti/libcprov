@@ -63,6 +63,18 @@ int main() {
             std::string json_response_data
                 = convert_job_data_to_json(std::move(job_data));
             res.set_content(json_response_data, "application/json");
+        },
+        [&](const httplib::Request& req, httplib::Response& res) {
+            std::cerr << "[http] POST /log size=" << req.body.size() << "\n";
+            std::cerr << req.body << "\n";
+            ParsedDBInterfaceRequestData parsed_db_interface_request_data
+                = parse_db_interface_request_data(std::move(req.body));
+            DBInterfaceData db_interface_data = fetch_db_interface_db_data(
+                std::move(parsed_db_interface_request_data));
+            // std::string json_response_data =
+            // convert_db_interface_data_to_json(
+            //     std::move(db_interface_data));
+            // res.set_content(json_response_data, "application/json");
         });
     server.run(4);
     return 0;

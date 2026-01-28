@@ -7,3 +7,5 @@
 
 ParsedInjectorData parse_injector_data(const std::string&);
 ParsedGraphRequestData parse_graph_request_data(std::string request_body);
+ParsedDBInterfaceRequestData parse_db_interface_request_data(
+    std::string request_body);

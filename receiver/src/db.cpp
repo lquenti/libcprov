@@ -464,3 +464,6 @@ JobData DB::get_job_data(uint64_t job_id, const std::string& cluster_name) {
     sqlite3_close(db);
     return out;
 }
+/*
+JobDataInterface DB::get_job_interface_data(JobsQueryOpts) {
+}*/

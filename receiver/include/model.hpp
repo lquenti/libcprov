@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 
+//--- PROV ---
 enum class InjectorDataType { Start, End, Exec };
 enum class OperationType { Read, Write, Link, Symlink, Delete };
 
@@ -106,7 +107,85 @@ struct JobData {
     std::vector<ExecData> exec_data_vector;
 };
 
+//--- GRAPH ---
 struct ParsedGraphRequestData {
     uint64_t job_id;
     std::string cluster_name;
+};
+
+//--- DB_INTERFACE ---
+enum class RequestType { JobsQuery, ExecsQuery, ProcessesQuery, FileQuery };
+
+struct JobsQueryOpts {
+    std::string user;
+    std::optional<std::string> before;
+    std::optional<std::string> after;
+};
+
+struct ExecsQueryOpts {
+    std::string job_id;
+    std::string cluster;
+    bool list_with_processes = false;
+    bool list_with_files = false;
+};
+
+struct ProcessesQueryOpts {
+    std::string exec_id;
+    bool list_with_files = false;
+};
+
+struct FileQueryOpts {
+    std::optional<int> exec_id;
+    std::optional<int> process_id;
+    bool reads = false;
+    bool writes = false;
+    bool deletes = false;
+};
+
+struct ParsedDBInterfaceRequestData {
+    RequestType request_type{};
+    std::variant<JobsQueryOpts, ExecsQueryOpts, ProcessesQueryOpts,
+                 FileQueryOpts>
+        opts;
+};
+
+struct DBOperations {
+    std::string filename;
+    std::vector<Operations> operations;
+};
+
+struct ProcessDataInterface {
+    std::optional<std::string> exec_id;
+    uint64_t process_id;
+    std::string launch_command;
+    std::optional<std::vector<DBOperations>> db_operations;
+};
+
+struct ExecDataInterface {
+    std::optional<std::string> job_id;
+    std::optional<std::string> cluster_name;
+    uint64_t exec_id;
+    uint64_t start_time;
+    std::string json;
+    std::string path;
+    std::string command;
+    std::optional<std::vector<ProcessDataInterface>> process_data_interface;
+};
+
+struct JobDataInterface {
+    std::string job_id;
+    std::string cluster_name;
+    std::string job_name;
+    std::string username;
+    uint64_t start_time;
+    uint64_t end_time;
+    std::string path;
+    std::string json;
+};
+
+struct DBInterfaceData {
+    RequestType request_type{};
+    std::variant<JobDataInterface, ExecDataInterface, ProcessDataInterface,
+                 DBOperations>
+        db_data;
 };

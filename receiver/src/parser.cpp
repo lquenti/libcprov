@@ -43,6 +43,7 @@ std::vector<std::string> parse_json_string_array(
     return out;
 }
 
+//--- PROV ---
 InjectorDataType get_injector_data_type(const std::string& type_string) {
     InjectorDataType result;
     if (type_string == "start") {
@@ -214,6 +215,7 @@ ParsedInjectorData parse_injector_data(const std::string& request_body) {
     return parsed_injector_data;
 }
 
+//--- GRAPH ---
 ParsedGraphRequestData parse_graph_request_data(std::string request_body) {
     ondemand::parser parser;
     padded_string padded_request_body_string(request_body);
@@ -222,4 +224,111 @@ ParsedGraphRequestData parse_graph_request_data(std::string request_body) {
     uint64_t job_id = get_uint64(doc, "job_id");
     std::string cluster_name = get_string(doc, "cluster_name");
     return ParsedGraphRequestData{job_id, cluster_name};
+}
+
+//--- DB_INTERFACE ---
+RequestType get_request_type(const std::string& request_type_string) {
+    if (request_type_string == "jobs") return RequestType::JobsQuery;
+    if (request_type_string == "execs") return RequestType::ExecsQuery;
+    if (request_type_string == "processes") return RequestType::ProcessesQuery;
+    if (request_type_string == "files") return RequestType::FileQuery;
+    return RequestType::JobsQuery;
+}
+
+static std::optional<std::string> get_optional_string(
+    simdjson::ondemand::object& json_object, const char* json_key) {
+    simdjson::ondemand::value json_value;
+    if (json_object.find_field_unordered(json_key).get(json_value)
+        != simdjson::SUCCESS)
+        return std::nullopt;
+    std::string_view json_string_view;
+    if (json_value.get_string().get(json_string_view) != simdjson::SUCCESS)
+        return std::nullopt;
+    return std::string(json_string_view);
+}
+
+static std::optional<int> get_optional_int(
+    simdjson::ondemand::object& json_object, const char* json_key) {
+    simdjson::ondemand::value json_value;
+    if (json_object.find_field_unordered(json_key).get(json_value)
+        != simdjson::SUCCESS)
+        return std::nullopt;
+    int64_t json_int64 = 0;
+    if (json_value.get_int64().get(json_int64) != simdjson::SUCCESS)
+        return std::nullopt;
+    return (int)json_int64;
+}
+
+static bool get_bool_default_false(simdjson::ondemand::object& json_object,
+                                   const char* json_key) {
+    simdjson::ondemand::value json_value;
+    if (json_object.find_field_unordered(json_key).get(json_value)
+        != simdjson::SUCCESS)
+        return false;
+    bool json_bool = false;
+    if (json_value.get_bool().get(json_bool) != simdjson::SUCCESS) return false;
+    return json_bool;
+}
+
+ParsedDBInterfaceRequestData parse_db_interface_request_data(
+    std::string request_body) {
+    simdjson::ondemand::parser simdjson_parser;
+    simdjson::padded_string padded_request_body_string(request_body);
+    auto simdjson_document_result
+        = simdjson_parser.iterate(padded_request_body_string);
+    auto simdjson_document_object
+        = simdjson_document_result.get_object().value();
+    simdjson::ondemand::object payload_object
+        = simdjson_document_object["payload"].get_object().value();
+    std::string request_type_string
+        = get_string(simdjson_document_object, "query_type");
+    RequestType request_type = get_request_type(request_type_string);
+    ParsedDBInterfaceRequestData parsed_db_interface_request_data;
+    parsed_db_interface_request_data.request_type = request_type;
+    switch (request_type) {
+        case (RequestType::JobsQuery): {
+            JobsQueryOpts jobs_query_opts;
+            jobs_query_opts.user = get_string(payload_object, "user");
+            jobs_query_opts.before
+                = get_optional_string(payload_object, "before");
+            jobs_query_opts.after
+                = get_optional_string(payload_object, "after");
+            parsed_db_interface_request_data.opts = std::move(jobs_query_opts);
+            return parsed_db_interface_request_data;
+        }
+        case (RequestType::ExecsQuery): {
+            ExecsQueryOpts execs_query_opts;
+            execs_query_opts.job_id = get_string(payload_object, "job_id");
+            execs_query_opts.cluster = get_string(payload_object, "cluster");
+            execs_query_opts.list_with_files
+                = get_bool_default_false(payload_object, "files");
+            parsed_db_interface_request_data.opts = std::move(execs_query_opts);
+            return parsed_db_interface_request_data;
+        }
+        case (RequestType::ProcessesQuery): {
+            ProcessesQueryOpts processes_query_opts;
+            processes_query_opts.exec_id
+                = get_string(payload_object, "exec_id");
+            processes_query_opts.list_with_files
+                = get_bool_default_false(payload_object, "files");
+            parsed_db_interface_request_data.opts
+                = std::move(processes_query_opts);
+            return parsed_db_interface_request_data;
+        }
+        case (RequestType::FileQuery): {
+            FileQueryOpts file_query_opts;
+            file_query_opts.exec_id
+                = get_optional_int(payload_object, "exec_id");
+            file_query_opts.process_id
+                = get_optional_int(payload_object, "process_id");
+            file_query_opts.reads
+                = get_bool_default_false(payload_object, "reads");
+            file_query_opts.writes
+                = get_bool_default_false(payload_object, "writes");
+            file_query_opts.deletes
+                = get_bool_default_false(payload_object, "deletes");
+            parsed_db_interface_request_data.opts = std::move(file_query_opts);
+            return parsed_db_interface_request_data;
+        }
+    }
 }
