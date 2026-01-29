@@ -259,6 +259,18 @@ static std::optional<int> get_optional_int(
     return (int)json_int64;
 }
 
+static std::optional<uint64_t> get_optional_uint64(
+    simdjson::ondemand::object& json_object, const char* json_key) {
+    simdjson::ondemand::value json_value;
+    if (json_object.find_field_unordered(json_key).get(json_value)
+        != simdjson::SUCCESS)
+        return std::nullopt;
+    uint64_t json_uint64 = 0;
+    if (json_value.get_uint64().get(json_uint64) != simdjson::SUCCESS)
+        return std::nullopt;
+    return json_uint64;
+}
+
 static bool get_bool_default_false(simdjson::ondemand::object& json_object,
                                    const char* json_key) {
     simdjson::ondemand::value json_value;
@@ -286,7 +298,7 @@ ParsedDBInterfaceRequestData parse_db_interface_request_data(
     ParsedDBInterfaceRequestData parsed_db_interface_request_data;
     parsed_db_interface_request_data.request_type = request_type;
     switch (request_type) {
-        case (RequestType::JobsQuery): {
+        case RequestType::JobsQuery: {
             JobsQueryOpts jobs_query_opts;
             jobs_query_opts.user = get_string(payload_object, "user");
             jobs_query_opts.before
@@ -296,31 +308,33 @@ ParsedDBInterfaceRequestData parse_db_interface_request_data(
             parsed_db_interface_request_data.opts = std::move(jobs_query_opts);
             return parsed_db_interface_request_data;
         }
-        case (RequestType::ExecsQuery): {
+        case RequestType::ExecsQuery: {
             ExecsQueryOpts execs_query_opts;
-            execs_query_opts.job_id = get_string(payload_object, "job_id");
+            execs_query_opts.job_id = get_uint64(payload_object, "job_id");
             execs_query_opts.cluster = get_string(payload_object, "cluster");
+            execs_query_opts.list_with_processes
+                = get_bool_default_false(payload_object, "processes");
             execs_query_opts.list_with_files
                 = get_bool_default_false(payload_object, "files");
             parsed_db_interface_request_data.opts = std::move(execs_query_opts);
             return parsed_db_interface_request_data;
         }
-        case (RequestType::ProcessesQuery): {
+        case RequestType::ProcessesQuery: {
             ProcessesQueryOpts processes_query_opts;
             processes_query_opts.exec_id
-                = get_string(payload_object, "exec_id");
+                = get_uint64(payload_object, "exec_id");
             processes_query_opts.list_with_files
                 = get_bool_default_false(payload_object, "files");
             parsed_db_interface_request_data.opts
                 = std::move(processes_query_opts);
             return parsed_db_interface_request_data;
         }
-        case (RequestType::FileQuery): {
+        case RequestType::FileQuery: {
             FileQueryOpts file_query_opts;
             file_query_opts.exec_id
-                = get_optional_int(payload_object, "exec_id");
+                = get_optional_uint64(payload_object, "exec_id");
             file_query_opts.process_id
-                = get_optional_int(payload_object, "process_id");
+                = get_optional_uint64(payload_object, "process_id");
             file_query_opts.reads
                 = get_bool_default_false(payload_object, "reads");
             file_query_opts.writes
@@ -331,4 +345,5 @@ ParsedDBInterfaceRequestData parse_db_interface_request_data(
             return parsed_db_interface_request_data;
         }
     }
+    throw std::runtime_error("unknown request_type");
 }

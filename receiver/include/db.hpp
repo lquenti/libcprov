@@ -50,6 +50,13 @@ class DB {
     JobInterfaceDataRows get_job_interface_data(std::string user,
                                                 uint64_t before,
                                                 uint64_t after);
+    ProcessMapDB read_processes(sqlite3* db, uint64_t exec_id, bool add_files);
+    std::vector<ExecData> read_execs(sqlite3* db, uint64_t job_id,
+                                     const std::string& cluster_name,
+                                     bool from_visiualizer, bool add_processes,
+                                     bool add_files);
+    std::unordered_map<std::string, Operations> read_operation_map(
+        sqlite3* db, uint64_t process_id);
 
    private:
     std::string db_file_;
@@ -69,15 +76,9 @@ class DB {
     std::string col_text(sqlite3_stmt* st, int i);
     uint64_t col_u64(sqlite3_stmt* st, int i);
     bool col_bool(sqlite3_stmt* st, int i);
-    std::unordered_map<std::string, Operations> read_operation_map(
-        sqlite3* db, uint64_t process_id);
-    ProcessMapDB read_process_map(sqlite3* db, uint64_t exec_id);
     ExecuteSetMapDB read_execute_set_map(sqlite3* db, uint64_t exec_id);
     RenameMap read_rename_map(sqlite3* db, uint64_t exec_id);
     EnvVariableHashPairs read_env_pairs_for_exec(sqlite3* db, uint64_t exec_id);
-    ExecData read_exec(sqlite3* db, uint64_t exec_id);
-    std::vector<uint64_t> get_exec_ids(sqlite3* db, uint64_t job_id,
-                                       const std::string& cluster_name);
     uint64_t pick_exec_id(sqlite3* db, uint64_t job_id,
                           const std::string& cluster_name);
 };

@@ -123,20 +123,20 @@ struct JobsQueryOpts {
 };
 
 struct ExecsQueryOpts {
-    std::string job_id;
+    uint64_t job_id;
     std::string cluster;
     bool list_with_processes = false;
     bool list_with_files = false;
 };
 
 struct ProcessesQueryOpts {
-    std::string exec_id;
+    uint64_t exec_id;
     bool list_with_files = false;
 };
 
 struct FileQueryOpts {
-    std::optional<int> exec_id;
-    std::optional<int> process_id;
+    std::optional<uint64_t> exec_id;
+    std::optional<uint64_t> process_id;
     bool reads = false;
     bool writes = false;
     bool deletes = false;
@@ -184,13 +184,12 @@ struct JobDataInterface {
 };
 
 using JobInterfaceDataRows = std::vector<JobDataInterface>;
-using ExecDataInterfaceRows = std::vector<ExecDataInterface>;
-using ProcessDataInterfaceRows = std::vector<ProcessDataInterface>;
-using DBOperationsRows = std::vector<DBOperations>;
+using ExecDataInterfaceRows = std::vector<ExecData>;
+using DBOperationsRows = std::unordered_map<std::string, Operations>;
 
 struct DBInterfaceData {
     RequestType request_type{};
-    std::variant<JobInterfaceDataRows, ExecDataInterfaceRows,
-                 ProcessDataInterfaceRows, DBOperationsRows>
+    std::variant<JobInterfaceDataRows, ExecDataInterfaceRows, ProcessMapDB,
+                 DBOperationsRows>
         db_data;
 };

@@ -130,6 +130,7 @@ DBInterfaceData fetch_db_interface_db_data(
     ParsedDBInterfaceRequestData parsed_db_interface_request_data) {
     DBInterfaceData db_interface_data;
     DB db = DB();
+    sqlite3* sqlite3_db = nullptr;
     switch (parsed_db_interface_request_data.request_type) {
         case (RequestType::JobsQuery): {
             JobsQueryOpts job_query_opts = std::get<JobsQueryOpts>(
@@ -151,19 +152,26 @@ DBInterfaceData fetch_db_interface_db_data(
         case (RequestType::ExecsQuery): {
             ExecsQueryOpts exec_query_opts = std::get<ExecsQueryOpts>(
                 parsed_db_interface_request_data.opts);
-            // db_interface_data.db_data = db.get_execs_interface_data(
-            //     exec_query_opts.job_id, exec_query_opts.cluster);
+            db_interface_data.db_data = db.read_execs(
+                sqlite3_db, exec_query_opts.job_id, exec_query_opts.cluster,
+                false, exec_query_opts.list_with_processes,
+                exec_query_opts.list_with_files);
             break;
         }
         case (RequestType::ProcessesQuery): {
-            // db_interface_data.db_data
-            //     = db.get_process_interface_data(std::get<ProcessesQueryOpts>(
-            //         parsed_db_interface_request_data.opts));
+            ProcessesQueryOpts processes_query_opts
+                = std::get<ProcessesQueryOpts>(
+                    parsed_db_interface_request_data.opts);
+            db_interface_data.db_data
+                = db.read_processes(sqlite3_db, processes_query_opts.exec_id,
+                                    processes_query_opts.list_with_files);
             break;
         }
         case (RequestType::FileQuery): {
-            // db_interface_data.db_data = db.get_files_interface_data(
-            //     std::get<FileQueryOpts>(parsed_db_interface_request_data.opts));
+            FileQueryOpts file_query_opts = std::get<FileQueryOpts>(
+                parsed_db_interface_request_data.opts);
+            db_interface_data.db_data = db.read_operation_map(
+                sqlite3_db, file_query_opts.process_id.value());
             break;
         }
     }

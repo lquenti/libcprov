@@ -310,24 +310,29 @@ std::unordered_map<std::string, Operations> DB::read_operation_map(
     return out;
 }
 
-ProcessMapDB DB::read_process_map(sqlite3* db, uint64_t exec_id) {
-    ProcessMapDB out;
+ProcessMapDB DB::read_processes(sqlite3* db, uint64_t exec_id, bool add_files) {
+    ProcessMapDB process_map_db;
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT process_id, launch_command, env_variables_hash "
                        "FROM processes WHERE exec_id=? ORDER BY process_id;",
                        -1, &st, nullptr);
     sqlite3_bind_int64(st, 1, (sqlite3_int64)exec_id);
+    Process process = {};
     while (sqlite3_step(st) == SQLITE_ROW) {
+        process = {};
         uint64_t process_id = col_u64(st, 0);
-        Process p;
-        p.process_command = col_text(st, 1);
-        p.env_variable_hash = col_u64(st, 2);
-        p.operation_map = read_operation_map(db, process_id);
-        out.emplace(process_id, std::move(p));
+        process.process_command = col_text(st, 1);
+        process.env_variable_hash = col_u64(st, 2);
+        process_map_db.emplace(process_id, std::move(process));
+    }
+    if (add_files) {
+        for (auto& [process_id, process] : process_map_db) {
+            process.operation_map = read_operation_map(db, process_id);
+        }
     }
     sqlite3_finalize(st);
-    return out;
+    return process_map_db;
 }
 
 ExecuteSetMapDB DB::read_execute_set_map(sqlite3* db, uint64_t exec_id) {
@@ -396,42 +401,42 @@ EnvVariableHashPairs DB::read_env_pairs_for_exec(sqlite3* db,
     return out;
 }
 
-ExecData DB::read_exec(sqlite3* db, uint64_t exec_id) {
-    ExecData exec;
+std::vector<ExecData> DB::read_execs(sqlite3* db, uint64_t job_id,
+                                     const std::string& cluster_name,
+                                     bool from_visiualizer, bool add_processes,
+                                     bool add_files) {
+    std::vector<ExecData> exec_data_entries;
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT exec_id, start_time, path, json, command "
-                       "FROM execs WHERE exec_id=?;",
+                       "WHERE job_id=? AND cluster_name=? ORDER BY exec_id;",
                        -1, &st, nullptr);
-    sqlite3_bind_int64(st, 1, (sqlite3_int64)exec_id);
-    if (sqlite3_step(st) == SQLITE_ROW) {
+    sqlite3_bind_int64(st, 1, (sqlite3_int64)job_id);
+    sqlite3_bind_text(st, 2, cluster_name.c_str(), -1, SQLITE_TRANSIENT);
+    ExecData exec = {};
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        exec = {};
         exec.exec_id = col_u64(st, 0);
         exec.start_time = col_u64(st, 1);
         exec.path = col_text(st, 2);
         exec.json = col_text(st, 3);
         exec.command = col_text(st, 4);
+        exec_data_entries.push_back(exec);
     }
     sqlite3_finalize(st);
-    exec.process_map_db = read_process_map(db, exec_id);
-    exec.execute_set_map_db = read_execute_set_map(db, exec_id);
-    exec.rename_map = read_rename_map(db, exec_id);
-    exec.env_variables_hash_to_variables = read_env_pairs_for_exec(db, exec_id);
-    return exec;
-}
-
-std::vector<uint64_t> DB::get_exec_ids(sqlite3* db, uint64_t job_id,
-                                       const std::string& cluster_name) {
-    std::vector<uint64_t> ids;
-    sqlite3_stmt* st = nullptr;
-    sqlite3_prepare_v2(db,
-                       "SELECT exec_id FROM execs WHERE job_id=? AND "
-                       "cluster_name=? ORDER BY exec_id;",
-                       -1, &st, nullptr);
-    sqlite3_bind_int64(st, 1, (sqlite3_int64)job_id);
-    sqlite3_bind_text(st, 2, cluster_name.c_str(), -1, SQLITE_TRANSIENT);
-    while (sqlite3_step(st) == SQLITE_ROW) ids.push_back(col_u64(st, 0));
-    sqlite3_finalize(st);
-    return ids;
+    for (ExecData exec : exec_data_entries) {
+        uint64_t exec_id = exec.exec_id.value();
+        if (from_visiualizer) {
+            exec.process_map_db = read_processes(db, exec_id, true);
+            exec.execute_set_map_db = read_execute_set_map(db, exec_id);
+            exec.rename_map = read_rename_map(db, exec_id);
+            exec.env_variables_hash_to_variables
+                = read_env_pairs_for_exec(db, exec_id);
+        } else if (add_processes || add_files) {
+            exec.process_map_db = read_processes(db, exec_id, add_files);
+        }
+    }
+    return exec_data_entries;
 }
 
 JobData DB::get_job_data(uint64_t job_id, const std::string& cluster_name) {
@@ -455,10 +460,8 @@ JobData DB::get_job_data(uint64_t job_id, const std::string& cluster_name) {
         out.end_time = col_u64(st, 3);
         out.path = col_text(st, 4);
         out.json = col_text(st, 5);
-        std::vector<uint64_t> exec_ids = get_exec_ids(db, job_id, cluster_name);
-        out.exec_data_vector.reserve(exec_ids.size());
-        for (uint64_t exec_id : exec_ids)
-            out.exec_data_vector.push_back(read_exec(db, exec_id));
+        out.exec_data_vector
+            = read_execs(db, job_id, cluster_name, true, false, false);
     }
     sqlite3_finalize(st);
     sqlite3_close(db);
@@ -472,7 +475,7 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
     sqlite3* db = nullptr;
     sqlite3_open(db_file_.c_str(), &db);
     sqlite3_stmt* st = nullptr;
-    if (after == 0 && before == 0) {
+    if (after != 0 && before != 0) {
         sqlite3_prepare_v2(
             db,
             "SELECT job_id, cluster_name, job_name, username, start_time, "
@@ -482,7 +485,7 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
         sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(st, 2, (sqlite3_int64)after);
         sqlite3_bind_int64(st, 3, (sqlite3_int64)before);
-    } else if (after == 0) {
+    } else if (after != 0) {
         sqlite3_prepare_v2(
             db,
             "SELECT job_id, cluster_name, job_name, username, start_time, "
@@ -491,7 +494,7 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
             -1, &st, nullptr);
         sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(st, 2, (sqlite3_int64)after);
-    } else if (before == 0) {
+    } else if (before != 0) {
         sqlite3_prepare_v2(
             db,
             "SELECT job_id, cluster_name, job_name, username, start_time, "
@@ -500,6 +503,14 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
             -1, &st, nullptr);
         sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(st, 2, (sqlite3_int64)before);
+    } else {
+        sqlite3_prepare_v2(
+            db,
+            "SELECT job_id, cluster_name, job_name, username, start_time, "
+            "end_time, path, json "
+            "FROM jobs WHERE username=?;",
+            -1, &st, nullptr);
+        sqlite3_bind_text(st, 1, user.c_str(), -1, SQLITE_TRANSIENT);
     }
     JobDataInterface job_data_interface = {};
     while (sqlite3_step(st) == SQLITE_ROW) {
