@@ -26,14 +26,12 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <functional>
 #include <mutex>
 #include <queue>
 #include <random>
@@ -44,6 +42,7 @@
 struct linux_dirent;
 struct linux_dirent64;
 
+static const char* endpoint_url = "http://127.0.0.1:9000/log";
 #define LOG_STR_MAX 256
 
 extern "C" char** environ;
@@ -86,86 +85,58 @@ static uint64_t random_id() {
     return dist(gen);
 }
 
+static const std::string slurm_job_id = "1";
+static const std::string slurm_cluster_name = "cname1";
+
+static std::vector<std::string> aggregated_events;
+static std::mutex events_mutex;
 static atomic_bool after_failed_execv = ATOMIC_VAR_INIT(false);
 static std::string nodename = std::to_string(random_id());
 
-enum : uint32_t {
-    EV_PROCESS_START = 1,
-    EV_PROCESS_END = 2,
-    EV_READ = 3,
-    EV_WRITE = 4,
-    EV_TRANSFER = 5,
-    EV_RENAME = 6,
-    EV_UNLINK = 7,
-    EV_EXEC = 8,
-    EV_EXEC_FAIL = 9
-};
-
-#pragma pack(push, 1)
-struct RecHdr {
-    uint32_t type;
-    uint32_t size;
-    uint64_t ts_ns;
-    int32_t pid;
-    int32_t tid;
-};
-#pragma pack(pop)
-
-static_assert(sizeof(RecHdr) == 24);
-
-static std::vector<uint8_t> event_buf;
-static std::mutex buf_mutex;
-
-static inline int32_t gettid32() {
-    return (int32_t)syscall(SYS_gettid);
-}
-
-static inline uint64_t now_ns_u64() {
+static std::string now_ns() {
     using namespace std::chrono;
-    return (uint64_t)duration_cast<nanoseconds>(
-               system_clock::now().time_since_epoch())
-        .count();
+    uint64_t ts
+        = duration_cast<nanoseconds>(system_clock::now().time_since_epoch())
+              .count();
+    std::string ts_string = std::to_string(ts);
+    return ts_string;
 }
 
-static inline void buf_append_locked(const void* p, size_t n) {
-    size_t old = event_buf.size();
-    event_buf.resize(old + n);
-    memcpy(event_buf.data() + old, p, n);
+static char** build_argv_from_varargs(const char* first, va_list ap) {
+    std::vector<char*> v;
+    if (first) v.push_back(const_cast<char*>(first));
+    const char* s;
+    while ((s = va_arg(ap, const char*)) != nullptr) {
+        v.push_back(const_cast<char*>(s));
+    }
+    v.push_back(nullptr);
+    char** argv = (char**)malloc(v.size() * sizeof(char*));
+    memcpy(argv, v.data(), v.size() * sizeof(char*));
+    return argv;
 }
 
-static inline void buf_append_u32(uint32_t v) {
-    buf_append_locked(&v, sizeof(v));
-}
-
-static inline void buf_append_str(const std::string& s) {
-    uint32_t len = (uint32_t)s.size();
-    buf_append_u32(len);
-    if (len) buf_append_locked(s.data(), len);
-}
-
-static inline void add_record(uint32_t type, uint64_t ts_ns,
-                              const std::function<void()>& payload_writer) {
-    std::lock_guard<std::mutex> g(buf_mutex);
-    RecHdr rec_hdr;
-    rec_hdr.type = type;
-    rec_hdr.ts_ns = ts_ns;
-    rec_hdr.pid = (int32_t)getpid();
-    rec_hdr.tid = gettid32();
-    rec_hdr.size = 0;
-    size_t start = event_buf.size();
-    buf_append_locked(&rec_hdr, sizeof(rec_hdr));
-    payload_writer();
-    size_t end = event_buf.size();
-    uint32_t total = (uint32_t)(end - start);
-    memcpy(event_buf.data() + start + offsetof(RecHdr, size), &total,
-           sizeof(total));
+static inline void add_operation(const std::string& operation,
+                                 const std::string& ts,
+                                 const std::string& event_json,
+                                 bool add_first = false) {
+    std::lock_guard<std::mutex> guard(events_mutex);
+    std::string event = R"({"event_header":{"operation":")" + operation
+                        + R"(","ts":)" + ts + R"(},"event_data":)" + event_json
+                        + "}\n";
+    if (add_first) {
+        aggregated_events.insert(aggregated_events.begin(), event);
+    } else {
+        aggregated_events.push_back(event);
+    }
 }
 
 static std::string fd_path(const int& fd) {
     char link[64];
     std::snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+
     std::array<char, 256> buf{};
     ssize_t r = ::readlink(link, buf.data(), buf.size() - 1);
+
     if (r >= 0) {
         buf[r] = '\0';
         return std::string(buf.data());
@@ -176,61 +147,52 @@ static std::string fd_path(const int& fd) {
 
 static void log_rename(const std::string original_path,
                        const std::string new_path) {
-    uint64_t ts = now_ns_u64();
-    add_record(EV_RENAME, ts, [&] {
-        buf_append_str(original_path);
-        buf_append_str(new_path);
-    });
+    std::string ts = now_ns();
+    std::string json = R"({"original_path":")" + original_path
+                       + R"(","new_path":")" + new_path + R"("})";
+    add_operation("RENAME", ts, json);
 }
 
 static void log_read_fd(int path_in_fd) {
     std::string path_in = fd_path(path_in_fd);
-    uint64_t ts = now_ns_u64();
-    add_record(EV_READ, ts, [&] {
-        int32_t fd = (int32_t)path_in_fd;
-        buf_append_locked(&fd, sizeof(fd));
-        buf_append_str(path_in);
-    });
+    std::string ts = now_ns();
+    std::string json = R"({"path":")" + path_in + R"("})";
+    add_operation("READ", ts, json);
 }
 
 static void log_write_fd(int path_out_fd) {
     std::string path_out = fd_path(path_out_fd);
-    uint64_t ts = now_ns_u64();
-    add_record(EV_WRITE, ts, [&] {
-        int32_t fd = (int32_t)path_out_fd;
-        buf_append_locked(&fd, sizeof(fd));
-        buf_append_str(path_out);
-    });
+    std::string ts = now_ns();
+    std::string json = R"({"path":")" + path_out + R"("})";
+    add_operation("WRITE", ts, json);
 }
 
 static void log_transfer_fd(int path_read_fd, int path_write_fd) {
     std::string path_read = fd_path(path_read_fd);
     std::string path_write = fd_path(path_write_fd);
-    uint64_t ts = now_ns_u64();
-    add_record(EV_TRANSFER, ts, [&] {
-        int32_t rfd = (int32_t)path_read_fd;
-        int32_t wfd = (int32_t)path_write_fd;
-        buf_append_locked(&rfd, sizeof(rfd));
-        buf_append_locked(&wfd, sizeof(wfd));
-        buf_append_str(path_read);
-        buf_append_str(path_write);
-    });
+    std::string ts = now_ns();
+    std::string json = R"({"path_read":")" + path_read + R"(","path_write":")"
+                       + path_write + R"("})";
+    add_operation("TRANSFER", ts, json);
 }
 
 static void log_exec() {
-    uint64_t ts = now_ns_u64();
-    add_record(EV_EXEC, ts, [&] {});
+    std::string ts = now_ns();
+    std::string json = R"({})";
+    add_operation("EXEC", ts, json);
 }
 
 static void log_exec_fail() {
     unsetenv("AFTER_EXECV");
-    uint64_t ts = now_ns_u64();
-    add_record(EV_EXEC_FAIL, ts, [&] {});
+    std::string ts = now_ns();
+    std::string json = R"({})";
+    add_operation("EXEC_FAIL", ts, json);
 }
 
 static void log_unlink(std::string path) {
-    uint64_t ts = now_ns_u64();
-    add_record(EV_UNLINK, ts, [&] { buf_append_str(path); });
+    std::string ts = now_ns();
+    std::string json = R"({"path":")" + path + R"("})";
+    add_operation("UNLINK", ts, json);
 }
 
 static std::string get_env_variables_string() {
@@ -269,46 +231,100 @@ static std::string get_env_variables_string() {
 }
 
 static void log_process_start() {
-    uint64_t ts = now_ns_u64();
+    std::string ts = now_ns();
     pid_t pid = getpid();
     pid_t ppid = getppid();
+    std::string operation = "PROCESS_START";
     std::string launch_command = get_full_cmd();
     std::string env_variables_string = get_env_variables_string();
-    add_record(EV_PROCESS_START, ts, [&] {
-        int32_t pid32 = (int32_t)pid;
-        int32_t ppid32 = (int32_t)ppid;
-        buf_append_locked(&pid32, sizeof(pid32));
-        buf_append_locked(&ppid32, sizeof(ppid32));
-        buf_append_str(launch_command);
-        buf_append_str(env_variables_string);
-    });
+    std::string json = R"({"pid":)" + std::to_string(pid) + R"(,"ppid":)"
+                       + std::to_string(ppid) + R"(,"launch_command":")"
+                       + launch_command + R"(","env_variables":)"
+                       + env_variables_string + R"(})";
+    add_operation(operation, ts, json, true);
 }
 
 static void log_process_end() {
-    uint64_t ts = now_ns_u64();
-    add_record(EV_PROCESS_END, ts, [&] {});
+    std::string ts = now_ns();
+    std::string operation = "PROCESS_END";
+    std::string json = "{}";
+    add_operation(operation, ts, json);
 }
 
 static bool get_after_failed_execv(void) {
     return atomic_load_explicit(&after_failed_execv, memory_order_relaxed);
 }
 
-static std::string make_output_path() {
-    return get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
-           + std::to_string(getpid()) + ".bin";
+struct ProvSaveData {
+    std::string path_write;
+    std::string all_events;
+};
+
+static ProvSaveData prepare_save_events() {
+    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
+                             + std::to_string(getpid()) + ".jsonl";
+    std::string all_events;
+    size_t total_size = 0;
+    for (const auto& event : aggregated_events) {
+        total_size += event.size();
+    }
+    all_events.reserve(total_size);
+    for (const auto& event : aggregated_events) {
+        all_events.append(event.data(), event.size());
+    }
+    aggregated_events.clear();
+    return ProvSaveData{std::move(path_write), std::move(all_events)};
 }
 
-static void flush_buffer_to_file() {
-    std::string path = make_output_path();
-    int fd = (int)syscall(SYS_open, path.c_str(), O_WRONLY | O_CREAT | O_APPEND,
-                          0644);
-    if (fd < 0) return;
-    std::lock_guard<std::mutex> g(buf_mutex);
-    if (!event_buf.empty()) {
-        (void)syscall(SYS_write, fd, event_buf.data(), event_buf.size());
-        event_buf.clear();
+static void save_events_clean(ProvSaveData& prov_save_data) {
+    std::string path_write = std::move(prov_save_data.path_write);
+    int fd = syscall(SYS_open, path_write.c_str(),
+                     O_WRONLY | O_CREAT | O_APPEND, 0644);
+    std::string all_events = std::move(prov_save_data.all_events);
+    if (fd >= 0) {
+        syscall(SYS_write, fd, all_events.data(), all_events.size());
+        syscall(SYS_close, fd);
     }
-    (void)syscall(SYS_close, fd);
+}
+
+static off_t find_trunc_pos_remove_last_line(int fd) {
+    off_t end = (off_t)syscall(SYS_lseek, fd, 0, SEEK_END);
+    const size_t CHUNK = 4096;
+    char buf[CHUNK];
+    off_t pos = end;
+    while (pos > 0) {
+        size_t to_read = (pos >= (off_t)CHUNK) ? CHUNK : (size_t)pos;
+        pos -= (off_t)to_read;
+        ssize_t r = (ssize_t)syscall(SYS_read, fd, buf, to_read);
+        for (ssize_t i = r - 1; i >= 0; --i) {
+            if (buf[i] == '\n') {
+                return pos + i + 1;
+            }
+        }
+    }
+    return pos;
+}
+
+static void append_events_clean(ProvSaveData& prov_save_data) {
+    std::string path_write = std::move(prov_save_data.path_write);
+    std::string all_events = std::move(prov_save_data.all_events);
+    int fd = (int)syscall(SYS_open, path_write.c_str(), O_RDWR, 0644);
+    if (fd < 0) return;
+    off_t trunc_pos = find_trunc_pos_remove_last_line(fd);
+    syscall(SYS_ftruncate, fd, trunc_pos);
+    syscall(SYS_lseek, fd, 0, SEEK_END);
+    syscall(SYS_write, fd, all_events.data(), all_events.size());
+    syscall(SYS_close, fd);
+}
+
+static void run_destructor_code() {
+    log_process_end();
+    ProvSaveData prov_save_data = prepare_save_events();
+    if (!get_after_failed_execv()) {
+        save_events_clean(prov_save_data);
+    } else {
+        append_events_clean(prov_save_data);
+    }
 }
 
 __attribute__((constructor)) static void preload_init(void) {
@@ -317,7 +333,7 @@ __attribute__((constructor)) static void preload_init(void) {
 
 __attribute__((destructor)) static void preload_fini(void) {
     log_process_end();
-    flush_buffer_to_file();
+    run_destructor_code();
 }
 
 static inline const struct sockaddr* msg_name_sa(const struct msghdr* msg,
@@ -337,23 +353,6 @@ static inline const struct sockaddr* mmsg0_name_sa(const struct mmsghdr* vec,
 
 static inline void set_after_failed_execv_true(void) {
     atomic_store_explicit(&after_failed_execv, true, memory_order_relaxed);
-}
-
-static char** build_argv_from_varargs(const char* first, va_list ap) {
-    size_t n = 0;
-    va_list ap2;
-    va_copy(ap2, ap);
-    for (const char* s = first; s; s = va_arg(ap2, const char*)) n++;
-    va_end(ap2);
-
-    char** argv = (char**)malloc((n + 1) * sizeof(char*));
-    if (!argv) return NULL;
-
-    size_t i = 0;
-    for (const char* s = first; s; s = va_arg(ap, const char*))
-        argv[i++] = (char*)s;
-    argv[i] = NULL;
-    return argv;
 }
 
 extern "C" {
@@ -713,7 +712,7 @@ int execve(const char* pathname, char* const argv[], char* const envp[]) {
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_execve(pathname, argv, envp);
     int e = errno;
     set_after_failed_execv_true();
@@ -728,7 +727,7 @@ int execveat(int dirfd, const char* pathname, char* const argv[],
                                          char* const[], int)) nullptr;
     RESOLVE_REAL(real_execveat, "__libc_execveat", "execveat", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_execveat(dirfd, pathname, argv, envp, flags);
     int e = errno;
     set_after_failed_execv_true();
@@ -741,7 +740,7 @@ int fexecve(int fd, char* const argv[], char* const envp[]) {
         = (int (*)(int, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_fexecve, "__libc_fexecve", "fexecve", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_fexecve(fd, argv, envp);
     int e = errno;
     set_after_failed_execv_true();
@@ -753,7 +752,7 @@ int execv(const char* path, char* const argv[]) {
     static auto real_execv = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execv, "__libc_execv", "execv", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_execv(path, argv);
     int e = errno;
     set_after_failed_execv_true();
@@ -766,7 +765,7 @@ int execvp(const char* file, char* const argv[]) {
     static auto real_execvp = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execvp, "__libc_execvp", "execvp", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_execvp(file, argv);
     int e = errno;
     set_after_failed_execv_true();
@@ -779,7 +778,7 @@ int execvpe(const char* file, char* const argv[], char* const envp[]) {
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execvpe, "__libc_execvpe", "execvpe", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     real_execvpe(file, argv, envp);
     int e = errno;
     set_after_failed_execv_true();
@@ -791,7 +790,7 @@ int execl(const char* path, const char* arg, ...) {
     static auto real_execv = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execv, "__libc_execv", "execv", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -812,7 +811,7 @@ int execlp(const char* file, const char* arg, ...) {
     static auto real_execvp = (int (*)(const char*, char* const[])) nullptr;
     RESOLVE_REAL(real_execvp, "__libc_execvp", "execvp", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -834,7 +833,7 @@ int execle(const char* path, const char* arg, ...) {
         = (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
     log_exec();
-    flush_buffer_to_file();
+    run_destructor_code();
     va_list ap;
     va_start(ap, arg);
     char** argv = build_argv_from_varargs(arg, ap);
@@ -954,7 +953,7 @@ static inline void prov_flush_once(void) {
     if (prov_flushed.compare_exchange_strong(expected, 1,
                                              std::memory_order_relaxed)) {
         log_process_end();
-        flush_buffer_to_file();
+        run_destructor_code();
     }
 }
 void _exit(int status) {

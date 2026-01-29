@@ -409,6 +409,7 @@ std::vector<ExecData> DB::read_execs(sqlite3* db, uint64_t job_id,
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(db,
                        "SELECT exec_id, start_time, path, json, command "
+                       "FROM execs "
                        "WHERE job_id=? AND cluster_name=? ORDER BY exec_id;",
                        -1, &st, nullptr);
     sqlite3_bind_int64(st, 1, (sqlite3_int64)job_id);
@@ -424,7 +425,7 @@ std::vector<ExecData> DB::read_execs(sqlite3* db, uint64_t job_id,
         exec_data_entries.push_back(exec);
     }
     sqlite3_finalize(st);
-    for (ExecData exec : exec_data_entries) {
+    for (ExecData& exec : exec_data_entries) {
         uint64_t exec_id = exec.exec_id.value();
         if (from_visiualizer) {
             exec.process_map_db = read_processes(db, exec_id, true);
