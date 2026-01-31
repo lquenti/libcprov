@@ -33,10 +33,12 @@
 #include <cstring>
 #include <fstream>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <random>
 #include <string>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 struct linux_dirent;
@@ -66,17 +68,52 @@ static std::string get_env(const char* name) {
     return val ? std::string(val) : std::string();
 }
 
-static std::string get_full_cmd() {
-    char exe_path[PATH_MAX];
-    if (!realpath("/proc/self/exe", exe_path)) return "";
-    std::ifstream cmdline("/proc/self/cmdline");
-    if (!cmdline) return exe_path;
-    std::string cmd, arg;
-    while (std::getline(cmdline, arg, '\0')) {
-        if (!cmd.empty()) cmd += ' ';
-        cmd += arg;
+static std::string readlink_sys(const char* path) {
+    char buf[PATH_MAX];
+    long n = syscall(SYS_readlink, path, buf, sizeof(buf) - 1);
+    if (n < 0) return {};
+    buf[n] = '\0';
+    return std::string(buf);
+}
+
+static std::string get_full_cmd_syscall() {
+    int fd
+        = (int)syscall(SYS_openat, AT_FDCWD, "/proc/self/cmdline", O_RDONLY, 0);
+    if (fd < 0) {
+        std::string exe = readlink_sys("/proc/self/exe");
+        return exe.empty() ? std::string{} : exe;
     }
-    return cmd;
+    std::string raw;
+    raw.reserve(4096);
+    char buf[4096];
+    for (;;) {
+        long r = syscall(SYS_read, fd, buf, sizeof(buf));
+        if (r <= 0) break;
+        raw.append(buf, (size_t)r);
+        if (raw.size() > (1u << 20)) break;
+    }
+    syscall(SYS_close, fd);
+    if (raw.empty()) {
+        std::string exe = readlink_sys("/proc/self/exe");
+        return exe.empty() ? std::string{} : exe;
+    }
+    std::string out;
+    out.reserve(raw.size());
+    bool need_space = false;
+    size_t i = 0;
+    while (i < raw.size()) {
+        while (i < raw.size() && raw[i] == '\0') i++;
+        if (i >= raw.size()) break;
+        if (need_space) out.push_back(' ');
+        need_space = true;
+        while (i < raw.size() && raw[i] != '\0') {
+            out.push_back(raw[i]);
+            i++;
+        }
+    }
+    if (!out.empty()) return out;
+    std::string exe = readlink_sys("/proc/self/exe");
+    return exe.empty() ? std::string{} : exe;
 }
 
 static uint64_t random_id() {
@@ -85,21 +122,15 @@ static uint64_t random_id() {
     return dist(gen);
 }
 
-static const std::string slurm_job_id = "1";
-static const std::string slurm_cluster_name = "cname1";
-
 static std::vector<std::string> aggregated_events;
-static std::mutex events_mutex;
+static std::mutex operations_mutex;
 static atomic_bool after_failed_execv = ATOMIC_VAR_INIT(false);
 static std::string nodename = std::to_string(random_id());
 
-static std::string now_ns() {
+static uint64_t now_ns() {
     using namespace std::chrono;
-    uint64_t ts
-        = duration_cast<nanoseconds>(system_clock::now().time_since_epoch())
-              .count();
-    std::string ts_string = std::to_string(ts);
-    return ts_string;
+    return duration_cast<nanoseconds>(system_clock::now().time_since_epoch())
+        .count();
 }
 
 static char** build_argv_from_varargs(const char* first, va_list ap) {
@@ -115,20 +146,46 @@ static char** build_argv_from_varargs(const char* first, va_list ap) {
     return argv;
 }
 
-static inline void add_operation(const std::string& operation,
-                                 const std::string& ts,
-                                 const std::string& event_json,
-                                 bool add_first = false) {
-    std::lock_guard<std::mutex> guard(events_mutex);
-    std::string event = R"({"event_header":{"operation":")" + operation
-                        + R"(","ts":)" + ts + R"(},"event_data":)" + event_json
-                        + "}\n";
-    if (add_first) {
-        aggregated_events.insert(aggregated_events.begin(), event);
-    } else {
-        aggregated_events.push_back(event);
-    }
-}
+enum class OperationType {
+    ProcessStart,
+    ProcessEnd,
+    Write,
+    Read,
+    Transfer,
+    Rename,
+    Exec,
+    ExecFail,
+    Unlink
+};
+struct Transfer {
+    std::string path_read;
+    std::string path_write;
+};
+struct Rename {
+    std::string original_path;
+    std::string new_path;
+};
+struct Exec {};
+struct ProcessStart {
+    uint64_t pid = 0;
+    uint64_t ppid = 0;
+    std::string process_name;
+    std::string env_variables;
+    std::optional<uint64_t> env_variables_hash;
+};
+struct ProcessEnd {};
+
+using OperationPayload = std::variant<std::string, Transfer, Rename, Exec,
+                                      ProcessStart, ProcessEnd>;
+
+struct Operation {
+    uint64_t ts = 0;
+    OperationType operation_type;
+    std::string operation_type_string;
+    OperationPayload operation_payload;
+};
+static std::queue<Operation> operations = {};
+static bool first_operation = true;
 
 static std::string fd_path(const int& fd) {
     char link[64];
@@ -143,56 +200,6 @@ static std::string fd_path(const int& fd) {
     } else {
         return "fd=" + std::to_string(fd);
     }
-}
-
-static void log_rename(const std::string original_path,
-                       const std::string new_path) {
-    std::string ts = now_ns();
-    std::string json = R"({"original_path":")" + original_path
-                       + R"(","new_path":")" + new_path + R"("})";
-    add_operation("RENAME", ts, json);
-}
-
-static void log_read_fd(int path_in_fd) {
-    std::string path_in = fd_path(path_in_fd);
-    std::string ts = now_ns();
-    std::string json = R"({"path":")" + path_in + R"("})";
-    add_operation("READ", ts, json);
-}
-
-static void log_write_fd(int path_out_fd) {
-    std::string path_out = fd_path(path_out_fd);
-    std::string ts = now_ns();
-    std::string json = R"({"path":")" + path_out + R"("})";
-    add_operation("WRITE", ts, json);
-}
-
-static void log_transfer_fd(int path_read_fd, int path_write_fd) {
-    std::string path_read = fd_path(path_read_fd);
-    std::string path_write = fd_path(path_write_fd);
-    std::string ts = now_ns();
-    std::string json = R"({"path_read":")" + path_read + R"(","path_write":")"
-                       + path_write + R"("})";
-    add_operation("TRANSFER", ts, json);
-}
-
-static void log_exec() {
-    std::string ts = now_ns();
-    std::string json = R"({})";
-    add_operation("EXEC", ts, json);
-}
-
-static void log_exec_fail() {
-    unsetenv("AFTER_EXECV");
-    std::string ts = now_ns();
-    std::string json = R"({})";
-    add_operation("EXEC_FAIL", ts, json);
-}
-
-static void log_unlink(std::string path) {
-    std::string ts = now_ns();
-    std::string json = R"({"path":")" + path + R"("})";
-    add_operation("UNLINK", ts, json);
 }
 
 static std::string get_env_variables_string() {
@@ -230,29 +237,124 @@ static std::string get_env_variables_string() {
     return out;
 }
 
-static void log_process_start() {
-    std::string ts = now_ns();
-    pid_t pid = getpid();
-    pid_t ppid = getppid();
-    std::string operation = "PROCESS_START";
-    std::string launch_command = get_full_cmd();
-    std::string env_variables_string = get_env_variables_string();
-    std::string json = R"({"pid":)" + std::to_string(pid) + R"(,"ppid":)"
-                       + std::to_string(ppid) + R"(,"launch_command":")"
-                       + launch_command + R"(","env_variables":)"
-                       + env_variables_string + R"(})";
-    add_operation(operation, ts, json, true);
+static Operation get_log_process_start(uint64_t first_op_ts) {
+    uint64_t pid = getpid();
+    uint64_t ppid = getppid();
+    std::string process_name = get_full_cmd_syscall();
+    std::string env_variables = get_env_variables_string();
+    return Operation{first_op_ts - 1, OperationType::ProcessStart,
+                     "PROCESS_START",
+                     ProcessStart{pid, ppid, process_name, env_variables}};
+}
+
+static void log_operation(Operation operation) {
+    bool first_operation_copy;
+    std::lock_guard<std::mutex> guard(operations_mutex);
+    if (first_operation) {
+        Operation process_start_log = get_log_process_start(operation.ts);
+        operations.push(process_start_log);
+        first_operation = false;
+    }
+    operations.push(operation);
+}
+
+static void log_rename(const std::string original_path,
+                       const std::string new_path) {
+    log_operation(Operation{now_ns(), OperationType::Rename, "RENAME",
+                            Rename{original_path, new_path}});
+}
+
+static void log_read_fd(int path_in_fd) {
+    std::string path_in = fd_path(path_in_fd);
+    log_operation(Operation{now_ns(), OperationType::Read, "READ", path_in});
+}
+
+static void log_write_fd(int path_out_fd) {
+    std::string path_out = fd_path(path_out_fd);
+    log_operation(Operation{now_ns(), OperationType::Write, "WRITE", path_out});
+}
+
+static void log_transfer_fd(int path_read_fd, int path_write_fd) {
+    std::string path_read = fd_path(path_read_fd);
+    std::string path_write = fd_path(path_write_fd);
+    log_operation(Operation{now_ns(), OperationType::Transfer, "TRANSFER",
+                            Transfer{path_read, path_write}});
+}
+
+static void log_exec() {
+    log_operation(Operation{now_ns(), OperationType::Exec, "EXEC", Exec{}});
+}
+
+static void log_exec_fail() {
+    log_operation(
+        Operation{now_ns(), OperationType::ExecFail, "EXEC_FAIL", Exec{}});
+}
+
+static void log_unlink(std::string path) {
+    log_operation(Operation{now_ns(), OperationType::Unlink, "UNLINK", path});
 }
 
 static void log_process_end() {
-    std::string ts = now_ns();
-    std::string operation = "PROCESS_END";
-    std::string json = "{}";
-    add_operation(operation, ts, json);
+    log_operation(Operation{now_ns(), OperationType::ProcessEnd, "PROCESS_END",
+                            ProcessEnd{}});
 }
 
 static bool get_after_failed_execv(void) {
     return atomic_load_explicit(&after_failed_execv, memory_order_relaxed);
+}
+
+static std::string build_header(Operation operation) {
+    return R"({"event_header":{"operation":")" + operation.operation_type_string
+           + R"(","ts":)" + std::to_string(operation.ts) + R"(},"event_data":)";
+}
+
+static std::string convert_operation_to_json(Operation operation) {
+    OperationType op_type = operation.operation_type;
+    const OperationPayload& payload = operation.operation_payload;
+    std::string payload_json;
+    switch (op_type) {
+        case OperationType ::ProcessStart: {
+            const ProcessStart& process_start = std::get<ProcessStart>(payload);
+            payload_json = R"({"pid":)" + std::to_string(process_start.pid)
+                           + R"(,"ppid":)" + std::to_string(process_start.ppid)
+                           + R"(,"launch_command":")"
+                           + process_start.process_name
+                           + R"(","env_variables":)"
+                           + process_start.env_variables + R"(})";
+            break;
+        }
+        case OperationType ::Write:
+        case OperationType ::Read:
+        case OperationType ::Unlink: {
+            const std::string& path = std::get<std::string>(payload);
+            payload_json = R"({"path":")" + path + R"("})";
+            break;
+        }
+        case OperationType ::Transfer: {
+            const Transfer& transfer = std::get<Transfer>(payload);
+            payload_json = R"({"path_read":")" + transfer.path_read
+                           + R"(","path_write":")" + transfer.path_write
+                           + R"("})";
+            break;
+        }
+        case OperationType ::Rename: {
+            const Rename& rename = std::get<Rename>(payload);
+            payload_json = R"({"original_path":")" + rename.original_path
+                           + R"(","new_path":")" + rename.new_path + R"("})";
+            break;
+        }
+        case OperationType ::ProcessEnd:
+        case OperationType ::Exec:
+        case OperationType ::ExecFail: {
+            payload_json = "{}";
+            break;
+        }
+        default:
+            break;
+    }
+    operation.operation_payload = {};
+    std::string json_header = build_header(std::move(operation));
+    return json_header + payload_json + "}\n";
 }
 
 struct ProvSaveData {
@@ -263,17 +365,29 @@ struct ProvSaveData {
 static ProvSaveData prepare_save_events() {
     std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
                              + std::to_string(getpid()) + ".jsonl";
-    std::string all_events;
     size_t total_size = 0;
-    for (const auto& event : aggregated_events) {
-        total_size += event.size();
+    std::string operation_json;
+    std::queue<std::string> all_operations_json;
+    {
+        std::lock_guard<std::mutex> guard(operations_mutex);
+        while (!operations.empty()) {
+            Operation operation = operations.front();
+            operations.pop();
+            operation_json = convert_operation_to_json(std::move(operation));
+            all_operations_json.push(operation_json);
+            total_size += operation_json.size();
+        }
     }
-    all_events.reserve(total_size);
-    for (const auto& event : aggregated_events) {
-        all_events.append(event.data(), event.size());
+    std::string all_operations_combined_json;
+    all_operations_combined_json.reserve(total_size);
+    while (!all_operations_json.empty()) {
+        std::string operation_json = all_operations_json.front();
+        all_operations_json.pop();
+        all_operations_combined_json.append(operation_json.data(),
+                                            operation_json.size());
     }
-    aggregated_events.clear();
-    return ProvSaveData{std::move(path_write), std::move(all_events)};
+    return ProvSaveData{std::move(path_write),
+                        std::move(all_operations_combined_json)};
 }
 
 static void save_events_clean(ProvSaveData& prov_save_data) {
@@ -287,48 +401,41 @@ static void save_events_clean(ProvSaveData& prov_save_data) {
     }
 }
 
-static off_t find_trunc_pos_remove_last_line(int fd) {
-    off_t end = (off_t)syscall(SYS_lseek, fd, 0, SEEK_END);
-    const size_t CHUNK = 4096;
-    char buf[CHUNK];
-    off_t pos = end;
-    while (pos > 0) {
-        size_t to_read = (pos >= (off_t)CHUNK) ? CHUNK : (size_t)pos;
-        pos -= (off_t)to_read;
-        ssize_t r = (ssize_t)syscall(SYS_read, fd, buf, to_read);
-        for (ssize_t i = r - 1; i >= 0; --i) {
-            if (buf[i] == '\n') {
-                return pos + i + 1;
-            }
-        }
-    }
-    return pos;
-}
-
 static void append_events_clean(ProvSaveData& prov_save_data) {
     std::string path_write = std::move(prov_save_data.path_write);
     std::string all_events = std::move(prov_save_data.all_events);
-    int fd = (int)syscall(SYS_open, path_write.c_str(), O_RDWR, 0644);
+
+    int fd = (int)syscall(SYS_open, path_write.c_str(),
+                          O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd < 0) return;
-    off_t trunc_pos = find_trunc_pos_remove_last_line(fd);
-    syscall(SYS_ftruncate, fd, trunc_pos);
-    syscall(SYS_lseek, fd, 0, SEEK_END);
+
     syscall(SYS_write, fd, all_events.data(), all_events.size());
     syscall(SYS_close, fd);
 }
+static std::atomic<int> prov_flushed{0};
+static void reset_state() {
+    {
+        std::lock_guard<std::mutex> guard(operations_mutex);
+        std::queue<Operation> empty;
+        operations.swap(empty);
+    }
+    first_operation = true;
+    atomic_store_explicit(&after_failed_execv, false, memory_order_relaxed);
+    nodename = std::to_string(random_id() ^ (uint64_t)getpid() ^ now_ns());
+    prov_flushed.store(0, std::memory_order_relaxed);
+}
 
 static void run_destructor_code() {
-    log_process_end();
     ProvSaveData prov_save_data = prepare_save_events();
     if (!get_after_failed_execv()) {
         save_events_clean(prov_save_data);
     } else {
         append_events_clean(prov_save_data);
     }
+    reset_state();
 }
 
 __attribute__((constructor)) static void preload_init(void) {
-    log_process_start();
 }
 
 __attribute__((destructor)) static void preload_fini(void) {
@@ -947,7 +1054,6 @@ int sem_unlink(const char* name) {
     return rc;
 }
 // ---- EXIT HOOKS ----
-static std::atomic<int> prov_flushed{0};
 static inline void prov_flush_once(void) {
     int expected = 0;
     if (prov_flushed.compare_exchange_strong(expected, 1,
