@@ -1,99 +1,137 @@
 #!/usr/bin/env Rscript
 
-dirp <- "/dev/shm/prov_test"
+die <- function(msg) {
+  stop(msg, call. = FALSE)
+}
 
-ensure_dir <- function(p) {
-  if (!dir.exists(p)) dir.create(p, recursive = TRUE, mode = "0777")
+ensure_dir <- function(path) {
+  if (!dir.exists(path)) {
+    ok <- dir.create(path, recursive = TRUE, mode = "0777")
+    if (!ok) die(paste("dir.create failed:", path))
+  }
 }
 
 write_file <- function(path, data) {
-  con <- file(path, open = "wb")
-  on.exit(close(con), add = TRUE)
-  writeBin(charToRaw(data), con)
+  ok <- writeLines(text = data, con = path, sep = "")
+  invisible(ok)
 }
 
-test_write_family <- function(dirp) {
-  p1 <- file.path(dirp, "write.txt")
-  p2 <- file.path(dirp, "fprintf.txt")
-  p3 <- file.path(dirp, "pwrite.txt")
+test_write_family <- function(dir) {
+  p1 <- file.path(dir, "write.txt")
+  p2 <- file.path(dir, "fprintf.txt")
+  p3 <- file.path(dir, "pwrite.txt")
   con1 <- file(p1, open = "wb")
-  on.exit(close(con1), add = TRUE)
+  on.exit(try(close(con1), silent = TRUE), add = TRUE)
   writeBin(charToRaw("hello\n"), con1)
-  writeBin(charToRaw("vector\n"), con1)
+  writeBin(charToRaw("vec"), con1)
+  writeBin(charToRaw("tor\n"), con1)
+  seek(con1, where = 0, origin = "start")
+  writeBin(charToRaw("PWRITE\n"), con1)
   close(con1)
+  con1a <- file(p1, open = "ab")
+  on.exit(try(close(con1a), silent = TRUE), add = TRUE)
+  writeBin(charToRaw(sprintf("dprintf %s\n", "ok")), con1a)
+  close(con1a)
   con2 <- file(p2, open = "wt")
+  on.exit(try(close(con2), silent = TRUE), add = TRUE)
   writeLines("fputs", con2)
   writeChar("X\n", con2, eos = NULL)
   writeLines(sprintf("fprintf %d", 123), con2)
-  writeLines("fwrite", con2)
+  writeChar("fwrite\n", con2, eos = NULL)
   flush(con2)
   close(con2)
   con3 <- file(p3, open = "wb")
+  on.exit(try(close(con3), silent = TRUE), add = TRUE)
+  seek(con3, 0, origin = "start")
   writeBin(charToRaw("PWRITE64\n"), con3)
   close(con3)
-  cona <- file(p1, open = "at")
-  writeLines(sprintf("dprintf %s", "ok"), cona)
-  close(cona)
 }
 
-test_read_family <- function(dirp) {
-  src <- file.path(dirp, "read_src.txt")
-  dst <- file.path(dirp, "read_dst.txt")
+test_read_family <- function(dir) {
+  src <- file.path(dir, "read_src.txt")
+  dst <- file.path(dir, "read_dst.txt")
   write_file(src, "0123456789abcdef\n")
   con <- file(src, open = "rb")
-  on.exit(close(con), add = TRUE)
-  readBin(con, "raw", n = 8)
-  seek(con, 2, origin = "start")
-  readBin(con, "raw", n = 8)
-  seek(con, 3, origin = "start")
-  readBin(con, "raw", n = 8)
+  on.exit(try(close(con), silent = TRUE), add = TRUE)
+  buf1 <- readBin(con, what = "raw", n = 8)
+  seek(con, 2, origin = "start"); buf2 <- readBin(con, "raw", n = 8)
+  seek(con, 3, origin = "start"); buf3 <- readBin(con, "raw", n = 8)
+  seek(con, 0, origin = "start")
+  b1 <- readBin(con, "raw", n = 4)
+  b2 <- readBin(con, "raw", n = 4)
   close(con)
-  con2 <- file(src, open = "rt")
-  readLines(con2, n = 1)
-  readChar(con2, nchars = 1)
+  con2 <- file(src, open = "rb")
+  on.exit(try(close(con2), silent = TRUE), add = TRUE)
   seek(con2, 0, origin = "start")
-  readChar(con2, nchars = 16, useBytes = TRUE)
+  line_raw <- raw()
+  while (TRUE) {
+    ch <- readBin(con2, "raw", n = 1)
+    if (length(ch) == 0) break
+    line_raw <- c(line_raw, ch)
+    if (as.integer(ch) == as.integer(charToRaw("\n"))) break
+  }
+  line <- rawToChar(line_raw)
+  ch1 <- readBin(con2, "raw", n = 1)
+  ch2 <- readBin(con2, "raw", n = 1)
+  seek(con2, 0, origin = "start")
+  rbuf <- readBin(con2, "raw", n = 16)
   close(con2)
-  conw <- file(dst, open = "wb")
-  writeBin(charToRaw("ok\n"), conw)
-  close(conw)
+  writeLines("ok", dst)
 }
 
-test_transfer_family <- function(dirp) {
-  src <- file.path(dirp, "transfer_src.bin")
-  dst1 <- file.path(dirp, "transfer_dst_sendfile.bin")
-  dst2 <- file.path(dirp, "transfer_dst_copy.bin")
+test_transfer_family <- function(dir) {
+  src  <- file.path(dir, "transfer_src.bin")
+  dst1 <- file.path(dir, "transfer_dst_sendfile.bin")
+  dst2 <- file.path(dir, "transfer_dst_copy.bin")
   write_file(src, "abcdefghijklmnopqrstuvwxyz0123456789\n")
-  file.copy(src, dst1, overwrite = TRUE)
-  file.copy(src, dst2, overwrite = TRUE)
+  ok1 <- file.copy(src, dst1, overwrite = TRUE)
+  if (!ok1) die("file.copy (sendfile analog) failed")
+  in_con  <- file(src, open = "rb")
+  on.exit(try(close(in_con), silent = TRUE), add = TRUE)
+  out_con <- file(dst2, open = "wb")
+  on.exit(try(close(out_con), silent = TRUE), add = TRUE)
+  repeat {
+    chunk <- readBin(in_con, what = "raw", n = 8192)
+    if (length(chunk) == 0) break
+    writeBin(chunk, out_con)
+  }
+  close(in_con); close(out_con)
 }
 
-test_rename_unlink <- function(dirp) {
-  p1 <- file.path(dirp, "rename_me.txt")
-  p2 <- file.path(dirp, "renamed.txt")
-  p3 <- file.path(dirp, "unlink_me.txt")
+test_rename_unlink <- function(dir) {
+  p1 <- file.path(dir, "rename_me.txt")
+  p2 <- file.path(dir, "renamed.txt")
+  p3 <- file.path(dir, "unlink_me.txt")
   write_file(p1, "rename\n")
-  file.rename(p1, p2)
+  ok <- file.rename(p1, p2)
+  if (!ok) die("file.rename failed")
   write_file(p3, "unlink\n")
-  unlink(p3)
-  unlink(p2)
+  if (file.exists(p3)) file.remove(p3)
+  if (file.exists(p2)) file.remove(p2)
 }
 
-test_exec_hooks <- function(dirp) {
-  child <- file.path(dirp, "child_exec_test")
-  script <- "#!/bin/sh\necho child_exec_ok\n"
-  writeLines(script, child)
-  Sys.chmod(child, mode = "0755")
-  system(child, ignore.stdout = FALSE, ignore.stderr = FALSE)
-  system2("sh", c("-c", "echo execvp_ok"))
-  system2("sh", c("-c", "echo execvpe_ok"), env = Sys.getenv())
+test_exec_hooks <- function(dir) {
+  child_path <- file.path(dir, "child_exec_test.sh")
+  script <- c("#!/bin/sh", "echo child_exec_ok")
+  writeLines(script, child_path)
+  Sys.chmod(child_path, mode = "0755")
+  out1 <- system2(child_path, stdout = TRUE, stderr = TRUE)
+  out2 <- system2("sh", c("-c", shQuote(child_path)), stdout = TRUE, stderr = TRUE)
+  out3 <- system2("sh", c("-c", "echo execvp_ok"), stdout = TRUE, stderr = TRUE)
+  out4 <- system2("sh", c("-c", "echo execvpe_ok"), stdout = TRUE, stderr = TRUE)
+  invisible(list(out1 = out1, out2 = out2, out3 = out3, out4 = out4))
 }
 
-Sys.sleep(3)
-ensure_dir("/dev/shm")
-ensure_dir(dirp)
-test_write_family(dirp)
-test_read_family(dirp)
-test_transfer_family(dirp)
-test_rename_unlink(dirp)
-test_exec_hooks(dirp)
+main <- function() {
+  dir <- "/dev/shm/prov_test"
+  ensure_dir("/dev/shm")
+  ensure_dir(dir)
+  test_write_family(dir)
+  test_read_family(dir)
+  test_transfer_family(dir)
+  test_rename_unlink(dir)
+  test_exec_hooks(dir)
+  invisible(0)
+}
+
+main()

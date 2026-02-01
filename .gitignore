@@ -1,4 +1,3 @@
-.clang-format
 receiver/build/
 receiver/CMakeFiles/
 receiver/CMakeCache.txt

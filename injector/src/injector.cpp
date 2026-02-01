@@ -77,8 +77,8 @@ static std::string readlink_sys(const char* path) {
 }
 
 static std::string get_full_cmd_syscall() {
-    int fd
-        = (int)syscall(SYS_openat, AT_FDCWD, "/proc/self/cmdline", O_RDONLY, 0);
+    int fd =
+        (int)syscall(SYS_openat, AT_FDCWD, "/proc/self/cmdline", O_RDONLY, 0);
     if (fd < 0) {
         std::string exe = readlink_sys("/proc/self/exe");
         return exe.empty() ? std::string{} : exe;
@@ -175,8 +175,8 @@ struct ProcessStart {
 };
 struct ProcessEnd {};
 
-using OperationPayload = std::variant<std::string, Transfer, Rename, Exec,
-                                      ProcessStart, ProcessEnd>;
+using OperationPayload =
+    std::variant<std::string, Transfer, Rename, Exec, ProcessStart, ProcessEnd>;
 
 struct Operation {
     uint64_t ts = 0;
@@ -204,8 +204,8 @@ static std::string fd_path(const int& fd) {
 
 static std::string get_env_variables_string() {
     const std::unordered_set<std::string> exclude = {"_", "SHLVL"};
-    std::queue<std::pair<std::string, std::string>> env_variables
-        = get_env_pairs_environ();
+    std::queue<std::pair<std::string, std::string>> env_variables =
+        get_env_pairs_environ();
     std::vector<std::pair<std::string, std::string>> items;
     items.reserve(env_variables.size());
     size_t payload_len = 0;
@@ -304,8 +304,9 @@ static bool get_after_failed_execv(void) {
 }
 
 static std::string build_header(Operation operation) {
-    return R"({"event_header":{"operation":")" + operation.operation_type_string
-           + R"(","ts":)" + std::to_string(operation.ts) + R"(},"event_data":)";
+    return R"({"event_header":{"operation":")" +
+           operation.operation_type_string + R"(","ts":)" +
+           std::to_string(operation.ts) + R"(},"event_data":)";
 }
 
 static std::string convert_operation_to_json(Operation operation) {
@@ -315,12 +316,11 @@ static std::string convert_operation_to_json(Operation operation) {
     switch (op_type) {
         case OperationType ::ProcessStart: {
             const ProcessStart& process_start = std::get<ProcessStart>(payload);
-            payload_json = R"({"pid":)" + std::to_string(process_start.pid)
-                           + R"(,"ppid":)" + std::to_string(process_start.ppid)
-                           + R"(,"launch_command":")"
-                           + process_start.process_name
-                           + R"(","env_variables":)"
-                           + process_start.env_variables + R"(})";
+            payload_json =
+                R"({"pid":)" + std::to_string(process_start.pid) +
+                R"(,"ppid":)" + std::to_string(process_start.ppid) +
+                R"(,"launch_command":")" + process_start.process_name +
+                R"(","env_variables":)" + process_start.env_variables + R"(})";
             break;
         }
         case OperationType ::Write:
@@ -332,15 +332,15 @@ static std::string convert_operation_to_json(Operation operation) {
         }
         case OperationType ::Transfer: {
             const Transfer& transfer = std::get<Transfer>(payload);
-            payload_json = R"({"path_read":")" + transfer.path_read
-                           + R"(","path_write":")" + transfer.path_write
-                           + R"("})";
+            payload_json = R"({"path_read":")" + transfer.path_read +
+                           R"(","path_write":")" + transfer.path_write +
+                           R"("})";
             break;
         }
         case OperationType ::Rename: {
             const Rename& rename = std::get<Rename>(payload);
-            payload_json = R"({"original_path":")" + rename.original_path
-                           + R"(","new_path":")" + rename.new_path + R"("})";
+            payload_json = R"({"original_path":")" + rename.original_path +
+                           R"(","new_path":")" + rename.new_path + R"("})";
             break;
         }
         case OperationType ::ProcessEnd:
@@ -363,8 +363,8 @@ struct ProvSaveData {
 };
 
 static ProvSaveData prepare_save_events() {
-    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_"
-                             + std::to_string(getpid()) + ".jsonl";
+    std::string path_write = get_env("PROV_PATH_WRITE") + "/" + nodename + "_" +
+                             std::to_string(getpid()) + ".jsonl";
     size_t total_size = 0;
     std::string operation_json;
     std::queue<std::string> all_operations_json;
@@ -435,8 +435,7 @@ static void run_destructor_code() {
     reset_state();
 }
 
-__attribute__((constructor)) static void preload_init(void) {
-}
+__attribute__((constructor)) static void preload_init(void) {}
 
 __attribute__((destructor)) static void preload_fini(void) {
     log_process_end();
@@ -485,8 +484,8 @@ ssize_t write(int fd, const void* buf, size_t count) {
     return ret;
 }
 size_t fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
-    static auto real_fwrite
-        = (size_t (*)(const void*, size_t, size_t, FILE*)) nullptr;
+    static auto real_fwrite =
+        (size_t (*)(const void*, size_t, size_t, FILE*)) nullptr;
     RESOLVE_REAL(real_fwrite, "__libc_fwrite", "fwrite", (size_t)0);
     size_t ret = real_fwrite(ptr, size, nmemb, stream);
     SAVE_ERRNO;
@@ -496,8 +495,8 @@ size_t fwrite(const void* ptr, size_t size, size_t nmemb, FILE* stream) {
     return ret;
 }
 ssize_t writev(int fd, const struct iovec* iov, int iovcnt) {
-    static auto real_writev
-        = (ssize_t (*)(int, const struct iovec*, int)) nullptr;
+    static auto real_writev =
+        (ssize_t (*)(int, const struct iovec*, int)) nullptr;
     RESOLVE_REAL(real_writev, "__libc_writev", "writev", (ssize_t)-1);
     ssize_t ret = real_writev(fd, iov, iovcnt);
     SAVE_ERRNO;
@@ -506,8 +505,8 @@ ssize_t writev(int fd, const struct iovec* iov, int iovcnt) {
     return ret;
 }
 ssize_t pwrite(int fd, const void* buf, size_t count, off_t offset) {
-    static auto real_pwrite
-        = (ssize_t (*)(int, const void*, size_t, off_t)) nullptr;
+    static auto real_pwrite =
+        (ssize_t (*)(int, const void*, size_t, off_t)) nullptr;
     RESOLVE_REAL(real_pwrite, "__libc_pwrite", "pwrite", (ssize_t)-1);
     ssize_t ret = real_pwrite(fd, buf, count, offset);
     SAVE_ERRNO;
@@ -516,8 +515,8 @@ ssize_t pwrite(int fd, const void* buf, size_t count, off_t offset) {
     return ret;
 }
 ssize_t pwrite64(int fd, const void* buf, size_t count, off64_t offset) {
-    static auto real_pwrite64
-        = (ssize_t (*)(int, const void*, size_t, off64_t)) nullptr;
+    static auto real_pwrite64 =
+        (ssize_t (*)(int, const void*, size_t, off64_t)) nullptr;
     RESOLVE_REAL(real_pwrite64, "__libc_pwrite64", "pwrite64", (ssize_t)-1);
     ssize_t ret = real_pwrite64(fd, buf, count, offset);
     SAVE_ERRNO;
@@ -602,8 +601,8 @@ int fputs_unlocked(const char* s, FILE* stream) {
 }
 size_t fwrite_unlocked(const void* ptr, size_t size, size_t nmemb,
                        FILE* stream) {
-    static auto real_fwrite_unlocked
-        = (size_t (*)(const void*, size_t, size_t, FILE*)) nullptr;
+    static auto real_fwrite_unlocked =
+        (size_t (*)(const void*, size_t, size_t, FILE*)) nullptr;
     RESOLVE_REAL(real_fwrite_unlocked, "__libc_fwrite_unlocked",
                  "fwrite_unlocked", (size_t)0);
     size_t ret = real_fwrite_unlocked(ptr, size, nmemb, stream);
@@ -614,8 +613,8 @@ size_t fwrite_unlocked(const void* ptr, size_t size, size_t nmemb,
     return ret;
 }
 ssize_t pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    static auto real_pwritev
-        = (ssize_t (*)(int, const struct iovec*, int, off_t)) nullptr;
+    static auto real_pwritev =
+        (ssize_t (*)(int, const struct iovec*, int, off_t)) nullptr;
     RESOLVE_REAL(real_pwritev, "__libc_pwritev", "pwritev", (ssize_t)-1);
     ssize_t ret = real_pwritev(fd, iov, iovcnt, offset);
     SAVE_ERRNO;
@@ -625,8 +624,8 @@ ssize_t pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
 }
 ssize_t pwritev2(int fd, const struct iovec* iov, int iovcnt, off_t offset,
                  int flags) {
-    static auto real_pwritev2
-        = (ssize_t (*)(int, const struct iovec*, int, off_t, int)) nullptr;
+    static auto real_pwritev2 =
+        (ssize_t (*)(int, const struct iovec*, int, off_t, int)) nullptr;
     RESOLVE_REAL(real_pwritev2, "__libc_pwritev2", "pwritev2", (ssize_t)-1);
     ssize_t ret = real_pwritev2(fd, iov, iovcnt, offset, flags);
     SAVE_ERRNO;
@@ -645,8 +644,8 @@ ssize_t sendfile(int out_fd, int in_fd, off_t* offset, size_t count) {
     return ret;
 }
 ssize_t sendfile64(int out_fd, int in_fd, off64_t* offset, size_t count) {
-    static auto real_sendfile64
-        = (ssize_t (*)(int, int, off64_t*, size_t)) nullptr;
+    static auto real_sendfile64 =
+        (ssize_t (*)(int, int, off64_t*, size_t)) nullptr;
     RESOLVE_REAL(real_sendfile64, "__libc_sendfile64", "sendfile64",
                  (ssize_t)-1);
     ssize_t ret = real_sendfile64(out_fd, in_fd, offset, count);
@@ -661,8 +660,8 @@ ssize_t copy_file_range(int fd_in, off64_t* off_in, int fd_out,
         int, off64_t*, int, off64_t*, size_t, unsigned int)) nullptr;
     RESOLVE_REAL(real_copy_file_range, "__libc_copy_file_range",
                  "copy_file_range", (ssize_t)-1);
-    ssize_t ret
-        = real_copy_file_range(fd_in, off_in, fd_out, off_out, len, flags);
+    ssize_t ret =
+        real_copy_file_range(fd_in, off_in, fd_out, off_out, len, flags);
     SAVE_ERRNO;
     log_transfer_fd(fd_in, fd_out);
     RESTORE_ERRNO;
@@ -699,8 +698,8 @@ ssize_t pread(int fd, void* buf, size_t count, off_t offset) {
     return ret;
 }
 ssize_t pread64(int fd, void* buf, size_t count, off64_t offset) {
-    static auto real_pread64
-        = (ssize_t (*)(int, void*, size_t, off64_t)) nullptr;
+    static auto real_pread64 =
+        (ssize_t (*)(int, void*, size_t, off64_t)) nullptr;
     RESOLVE_REAL(real_pread64, "__libc_pread64", "pread64", (ssize_t)-1);
     ssize_t ret = real_pread64(fd, buf, count, offset);
     SAVE_ERRNO;
@@ -709,8 +708,8 @@ ssize_t pread64(int fd, void* buf, size_t count, off64_t offset) {
     return ret;
 }
 ssize_t readv(int fd, const struct iovec* iov, int iovcnt) {
-    static auto real_readv
-        = (ssize_t (*)(int, const struct iovec*, int)) nullptr;
+    static auto real_readv =
+        (ssize_t (*)(int, const struct iovec*, int)) nullptr;
     RESOLVE_REAL(real_readv, "__libc_readv", "readv", (ssize_t)-1);
     ssize_t ret = real_readv(fd, iov, iovcnt);
     SAVE_ERRNO;
@@ -719,8 +718,8 @@ ssize_t readv(int fd, const struct iovec* iov, int iovcnt) {
     return ret;
 }
 ssize_t preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    static auto real_preadv
-        = (ssize_t (*)(int, const struct iovec*, int, off_t)) nullptr;
+    static auto real_preadv =
+        (ssize_t (*)(int, const struct iovec*, int, off_t)) nullptr;
     RESOLVE_REAL(real_preadv, "__libc_preadv", "preadv", (ssize_t)-1);
     ssize_t ret = real_preadv(fd, iov, iovcnt, offset);
     SAVE_ERRNO;
@@ -730,8 +729,8 @@ ssize_t preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
 }
 ssize_t preadv2(int fd, const struct iovec* iov, int iovcnt, off_t offset,
                 int flags) {
-    static auto real_preadv2
-        = (ssize_t (*)(int, const struct iovec*, int, off_t, int)) nullptr;
+    static auto real_preadv2 =
+        (ssize_t (*)(int, const struct iovec*, int, off_t, int)) nullptr;
     RESOLVE_REAL(real_preadv2, "__libc_preadv2", "preadv2", (ssize_t)-1);
     ssize_t ret = real_preadv2(fd, iov, iovcnt, offset, flags);
     SAVE_ERRNO;
@@ -740,8 +739,8 @@ ssize_t preadv2(int fd, const struct iovec* iov, int iovcnt, off_t offset,
     return ret;
 }
 int getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count) {
-    static auto real_getdents
-        = (int (*)(unsigned int, struct linux_dirent*, unsigned int)) nullptr;
+    static auto real_getdents =
+        (int (*)(unsigned int, struct linux_dirent*, unsigned int)) nullptr;
     RESOLVE_REAL(real_getdents, "__libc_getdents", "getdents", -1);
     int ret = real_getdents(fd, dirp, count);
     SAVE_ERRNO;
@@ -751,8 +750,8 @@ int getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count) {
 }
 int getdents64(unsigned int fd, struct linux_dirent64* dirp,
                unsigned int count) {
-    static auto real_getdents64
-        = (int (*)(unsigned int, struct linux_dirent64*, unsigned int)) nullptr;
+    static auto real_getdents64 =
+        (int (*)(unsigned int, struct linux_dirent64*, unsigned int)) nullptr;
     RESOLVE_REAL(real_getdents64, "__libc_getdents64", "getdents64", -1);
     int ret = real_getdents64(fd, dirp, count);
     SAVE_ERRNO;
@@ -801,12 +800,22 @@ int getc(FILE* stream) {
     return ret;
 }
 int fscanf(FILE* stream, const char* format, ...) {
-    static auto real_fscanf = (int (*)(FILE*, const char*, ...)) nullptr;
-    RESOLVE_REAL(real_fscanf, "__libc_fscanf", "fscanf", -1);
+    static int (*real_vfscanf)(FILE*, const char*, va_list) = NULL;
+    RESOLVE_REAL(real_vfscanf, "__isoc99_vfscanf", "vfscanf", -1);
     va_list ap;
     va_start(ap, format);
-    int ret = real_fscanf(stream, format, ap);
+    int ret = real_vfscanf(stream, format, ap);
     va_end(ap);
+    SAVE_ERRNO;
+    int fd = stream ? fileno(stream) : -1;
+    log_read_fd(fd);
+    RESTORE_ERRNO;
+    return ret;
+}
+int vfscanf(FILE* stream, const char* format, va_list ap) {
+    static int (*real_vfscanf)(FILE*, const char*, va_list) = NULL;
+    RESOLVE_REAL(real_vfscanf, "__isoc99_vfscanf", "vfscanf", -1);
+    int ret = real_vfscanf(stream, format, ap);
     SAVE_ERRNO;
     int fd = stream ? fileno(stream) : -1;
     log_read_fd(fd);
@@ -815,8 +824,8 @@ int fscanf(FILE* stream, const char* format, ...) {
 }
 // --------------------- EXEC HOOKS -----------------------
 int execve(const char* pathname, char* const argv[], char* const envp[]) {
-    static auto real_execve
-        = (int (*)(const char*, char* const[], char* const[])) nullptr;
+    static auto real_execve =
+        (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
     log_exec();
     run_destructor_code();
@@ -830,8 +839,8 @@ int execve(const char* pathname, char* const argv[], char* const envp[]) {
 
 int execveat(int dirfd, const char* pathname, char* const argv[],
              char* const envp[], int flags) {
-    static auto real_execveat = (int (*)(int, const char*, char* const[],
-                                         char* const[], int)) nullptr;
+    static auto real_execveat =
+        (int (*)(int, const char*, char* const[], char* const[], int)) nullptr;
     RESOLVE_REAL(real_execveat, "__libc_execveat", "execveat", -1);
     log_exec();
     run_destructor_code();
@@ -843,8 +852,8 @@ int execveat(int dirfd, const char* pathname, char* const argv[],
     return -1;
 }
 int fexecve(int fd, char* const argv[], char* const envp[]) {
-    static auto real_fexecve
-        = (int (*)(int, char* const[], char* const[])) nullptr;
+    static auto real_fexecve =
+        (int (*)(int, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_fexecve, "__libc_fexecve", "fexecve", -1);
     log_exec();
     run_destructor_code();
@@ -881,8 +890,8 @@ int execvp(const char* file, char* const argv[]) {
     return -1;
 }
 int execvpe(const char* file, char* const argv[], char* const envp[]) {
-    static auto real_execvpe
-        = (int (*)(const char*, char* const[], char* const[])) nullptr;
+    static auto real_execvpe =
+        (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execvpe, "__libc_execvpe", "execvpe", -1);
     log_exec();
     run_destructor_code();
@@ -936,8 +945,8 @@ int execlp(const char* file, const char* arg, ...) {
     return -1;
 }
 int execle(const char* path, const char* arg, ...) {
-    static auto real_execve
-        = (int (*)(const char*, char* const[], char* const[])) nullptr;
+    static auto real_execve =
+        (int (*)(const char*, char* const[], char* const[])) nullptr;
     RESOLVE_REAL(real_execve, "__libc_execve", "execve", -1);
     log_exec();
     run_destructor_code();
@@ -970,8 +979,8 @@ int rename(const char* oldpath, const char* newpath) {
 }
 int renameat(int olddirfd, const char* oldpath, int newdirfd,
              const char* newpath) {
-    static auto real_renameat
-        = (int (*)(int, const char*, int, const char*)) nullptr;
+    static auto real_renameat =
+        (int (*)(int, const char*, int, const char*)) nullptr;
     RESOLVE_REAL(real_renameat, "__libc_renameat", "renameat", -1);
     int rc = real_renameat(olddirfd, oldpath, newdirfd, newpath);
     SAVE_ERRNO;
@@ -981,8 +990,8 @@ int renameat(int olddirfd, const char* oldpath, int newdirfd,
 }
 int renameat2(int olddirfd, const char* oldpath, int newdirfd,
               const char* newpath, unsigned int flags) {
-    static auto real_renameat2
-        = (int (*)(int, const char*, int, const char*, unsigned int)) nullptr;
+    static auto real_renameat2 =
+        (int (*)(int, const char*, int, const char*, unsigned int)) nullptr;
     RESOLVE_REAL(real_renameat2, "__libc_renameat2", "renameat2", -1);
     int rc = real_renameat2(olddirfd, oldpath, newdirfd, newpath, flags);
     SAVE_ERRNO;
