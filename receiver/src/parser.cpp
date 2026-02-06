@@ -1,7 +1,6 @@
 #include "parser.hpp"
 
 #include <simdjson.h>
-#include <xxhash.h>
 
 #include <cstdint>
 #include <string>
@@ -11,21 +10,21 @@
 using namespace simdjson;
 
 std::string get_string(ondemand::object& obj, const char* name) {
-    simdjson_result<std::string_view> result
-        = obj.find_field_unordered(name).get_string();
+    simdjson_result<std::string_view> result =
+        obj.find_field_unordered(name).get_string();
     return std::string(result.value());
 }
 
 uint64_t get_uint64(ondemand::object& obj, const char* name) {
-    simdjson_result<uint64_t> result
-        = obj.find_field_unordered(name).get_uint64();
+    simdjson_result<uint64_t> result =
+        obj.find_field_unordered(name).get_uint64();
     return result.value();
 }
 
 std::string get_array_json(simdjson::ondemand::object& obj,
                            const std::string_view& name) {
-    simdjson::simdjson_result<simdjson::ondemand::value> v_res
-        = obj.find_field_unordered(name);
+    simdjson::simdjson_result<simdjson::ondemand::value> v_res =
+        obj.find_field_unordered(name);
     simdjson::ondemand::value v = v_res.value();
     simdjson::simdjson_result<simdjson::ondemand::json_type> t = v.type();
     simdjson::simdjson_result<std::string_view> raw = v.raw_json();
@@ -99,13 +98,13 @@ ProcessMap parse_processes(ondemand::array simdjson_processes) {
     for (ondemand::value process_value : simdjson_processes) {
         ondemand::object simdjson_process = process_value.get_object().value();
         Process process;
-        process.process_command
-            = get_string(simdjson_process, "process_command");
+        process.process_command =
+            get_string(simdjson_process, "process_command");
         std::string process_id = get_string(simdjson_process, "process_id");
-        process.env_variable_hash
-            = get_uint64(simdjson_process, "env_variable_hash");
-        ondemand::object simdjson_operations
-            = simdjson_process["operations"].get_object().value();
+        process.env_variable_hash =
+            get_uint64(simdjson_process, "env_variable_hash");
+        ondemand::object simdjson_operations =
+            simdjson_process["operations"].get_object().value();
         process.operation_map = parse_operation_map(simdjson_operations);
         process_map[process_id] = process;
     }
@@ -115,10 +114,10 @@ ProcessMap parse_processes(ondemand::array simdjson_processes) {
 ExecuteSetMap parse_execute_maps(ondemand::array simdjson_execute_maps) {
     ExecuteSetMap execute_set_map;
     for (ondemand::value execute_map_value : simdjson_execute_maps) {
-        ondemand::object simdjson_execute_map
-            = execute_map_value.get_object().value();
-        std::string parent_process_id
-            = get_string(simdjson_execute_map, "parent_process_id");
+        ondemand::object simdjson_execute_map =
+            execute_map_value.get_object().value();
+        std::string parent_process_id =
+            get_string(simdjson_execute_map, "parent_process_id");
         std::vector<std::string> child_process_ids = parse_json_string_array(
             simdjson_execute_map, "child_process_id_array");
         std::unordered_set<std::string> child_process_ids_set(
@@ -149,10 +148,10 @@ EnvVariableHashPairs parse_env_variable_hash_pairs(
     std::string env_variables;
     for (ondemand::value hash_pair : simdjson_hash_pairs) {
         ondemand::object simdjson_hash_pair = hash_pair.get_object().value();
-        env_variables_hash
-            = get_uint64(simdjson_hash_pair, "env_variables_hash");
-        env_variables
-            = get_array_json(simdjson_hash_pair, "env_variables_array");
+        env_variables_hash =
+            get_uint64(simdjson_hash_pair, "env_variables_hash");
+        env_variables =
+            get_array_json(simdjson_hash_pair, "env_variables_array");
         env_variable_hash_pairs[env_variables_hash] = env_variables;
     };
     return env_variable_hash_pairs;
@@ -160,13 +159,13 @@ EnvVariableHashPairs parse_env_variable_hash_pairs(
 
 ExecData get_exec_data(ondemand::object& payload) {
     ProcessMap process_map = parse_processes(payload["processes"].get_array());
-    ExecuteSetMap execute_set_map
-        = parse_execute_maps(payload["execute_map"].get_array());
-    ondemand::object simdjson_rename_map
-        = payload["rename_map"].get_object().value();
+    ExecuteSetMap execute_set_map =
+        parse_execute_maps(payload["execute_map"].get_array());
+    ondemand::object simdjson_rename_map =
+        payload["rename_map"].get_object().value();
     RenameMap rename_map = parse_rename_map(simdjson_rename_map);
-    EnvVariableHashPairs env_variable_hash_pairs
-        = parse_env_variable_hash_pairs(
+    EnvVariableHashPairs env_variable_hash_pairs =
+        parse_env_variable_hash_pairs(
             payload["env_variable_hash_pair_array"].get_array());
     std::string json = get_string(payload, "json");
     std::string path = get_string(payload, "path");
@@ -238,8 +237,8 @@ RequestType get_request_type(const std::string& request_type_string) {
 static std::optional<std::string> get_optional_string(
     simdjson::ondemand::object& json_object, const char* json_key) {
     simdjson::ondemand::value json_value;
-    if (json_object.find_field_unordered(json_key).get(json_value)
-        != simdjson::SUCCESS)
+    if (json_object.find_field_unordered(json_key).get(json_value) !=
+        simdjson::SUCCESS)
         return std::nullopt;
     std::string_view json_string_view;
     if (json_value.get_string().get(json_string_view) != simdjson::SUCCESS)
@@ -250,8 +249,8 @@ static std::optional<std::string> get_optional_string(
 static std::optional<int> get_optional_int(
     simdjson::ondemand::object& json_object, const char* json_key) {
     simdjson::ondemand::value json_value;
-    if (json_object.find_field_unordered(json_key).get(json_value)
-        != simdjson::SUCCESS)
+    if (json_object.find_field_unordered(json_key).get(json_value) !=
+        simdjson::SUCCESS)
         return std::nullopt;
     int64_t json_int64 = 0;
     if (json_value.get_int64().get(json_int64) != simdjson::SUCCESS)
@@ -262,8 +261,8 @@ static std::optional<int> get_optional_int(
 static std::optional<uint64_t> get_optional_uint64(
     simdjson::ondemand::object& json_object, const char* json_key) {
     simdjson::ondemand::value json_value;
-    if (json_object.find_field_unordered(json_key).get(json_value)
-        != simdjson::SUCCESS)
+    if (json_object.find_field_unordered(json_key).get(json_value) !=
+        simdjson::SUCCESS)
         return std::nullopt;
     uint64_t json_uint64 = 0;
     if (json_value.get_uint64().get(json_uint64) != simdjson::SUCCESS)
@@ -274,8 +273,8 @@ static std::optional<uint64_t> get_optional_uint64(
 static bool get_bool_default_false(simdjson::ondemand::object& json_object,
                                    const char* json_key) {
     simdjson::ondemand::value json_value;
-    if (json_object.find_field_unordered(json_key).get(json_value)
-        != simdjson::SUCCESS)
+    if (json_object.find_field_unordered(json_key).get(json_value) !=
+        simdjson::SUCCESS)
         return false;
     bool json_bool = false;
     if (json_value.get_bool().get(json_bool) != simdjson::SUCCESS) return false;
@@ -284,65 +283,51 @@ static bool get_bool_default_false(simdjson::ondemand::object& json_object,
 
 ParsedDBInterfaceRequestData parse_db_interface_request_data(
     std::string request_body) {
-    simdjson::ondemand::parser simdjson_parser;
-    simdjson::padded_string padded_request_body_string(request_body);
-    auto simdjson_document_result
-        = simdjson_parser.iterate(padded_request_body_string);
-    auto simdjson_document_object
-        = simdjson_document_result.get_object().value();
-    simdjson::ondemand::object payload_object
-        = simdjson_document_object["payload"].get_object().value();
-    std::string request_type_string
-        = get_string(simdjson_document_object, "query_type");
+    simdjson::ondemand::parser p;
+    simdjson::padded_string s(request_body);
+    auto docres = p.iterate(s);
+    simdjson::ondemand::object root = docres.get_object().value();
+    std::string request_type_string = get_string(root, "query_type");
     RequestType request_type = get_request_type(request_type_string);
-    ParsedDBInterfaceRequestData parsed_db_interface_request_data;
-    parsed_db_interface_request_data.request_type = request_type;
+    simdjson::ondemand::value payload_val = root["payload"];
+    simdjson::ondemand::object payload = payload_val.get_object().value();
+    ParsedDBInterfaceRequestData out;
+    out.request_type = request_type;
     switch (request_type) {
         case RequestType::JobsQuery: {
-            JobsQueryOpts jobs_query_opts;
-            jobs_query_opts.user = get_string(payload_object, "user");
-            jobs_query_opts.before
-                = get_optional_string(payload_object, "before");
-            jobs_query_opts.after
-                = get_optional_string(payload_object, "after");
-            parsed_db_interface_request_data.opts = std::move(jobs_query_opts);
-            return parsed_db_interface_request_data;
+            JobsQueryOpts o;
+            o.user = get_string(payload, "user");
+            o.before = get_optional_string(payload, "before");
+            o.after = get_optional_string(payload, "after");
+            out.opts = std::move(o);
+            return out;
         }
         case RequestType::ExecsQuery: {
-            ExecsQueryOpts execs_query_opts;
-            execs_query_opts.job_id = get_uint64(payload_object, "job_id");
-            execs_query_opts.cluster = get_string(payload_object, "cluster");
-            execs_query_opts.list_with_processes
-                = get_bool_default_false(payload_object, "processes");
-            execs_query_opts.list_with_files
-                = get_bool_default_false(payload_object, "files");
-            parsed_db_interface_request_data.opts = std::move(execs_query_opts);
-            return parsed_db_interface_request_data;
+            ExecsQueryOpts o;
+            o.job_id = get_uint64(payload, "job_id");
+            o.cluster = get_string(payload, "cluster");
+            o.list_with_processes =
+                get_bool_default_false(payload, "processes");
+            o.list_with_files = get_bool_default_false(payload, "files");
+            out.opts = std::move(o);
+            return out;
         }
         case RequestType::ProcessesQuery: {
-            ProcessesQueryOpts processes_query_opts;
-            processes_query_opts.exec_id
-                = get_uint64(payload_object, "exec_id");
-            processes_query_opts.list_with_files
-                = get_bool_default_false(payload_object, "files");
-            parsed_db_interface_request_data.opts
-                = std::move(processes_query_opts);
-            return parsed_db_interface_request_data;
+            ProcessesQueryOpts o;
+            o.exec_id = get_uint64(payload, "exec_id");
+            o.list_with_files = get_bool_default_false(payload, "files");
+            out.opts = std::move(o);
+            return out;
         }
         case RequestType::FileQuery: {
-            FileQueryOpts file_query_opts;
-            file_query_opts.exec_id
-                = get_optional_uint64(payload_object, "exec_id");
-            file_query_opts.process_id
-                = get_optional_uint64(payload_object, "process_id");
-            file_query_opts.reads
-                = get_bool_default_false(payload_object, "reads");
-            file_query_opts.writes
-                = get_bool_default_false(payload_object, "writes");
-            file_query_opts.deletes
-                = get_bool_default_false(payload_object, "deletes");
-            parsed_db_interface_request_data.opts = std::move(file_query_opts);
-            return parsed_db_interface_request_data;
+            FileQueryOpts o;
+            o.exec_id = get_optional_uint64(payload, "exec_id");
+            o.process_id = get_optional_uint64(payload, "process_id");
+            o.reads = get_bool_default_false(payload, "reads");
+            o.writes = get_bool_default_false(payload, "writes");
+            o.deletes = get_bool_default_false(payload, "deletes");
+            out.opts = std::move(o);
+            return out;
         }
     }
     throw std::runtime_error("unknown request_type");

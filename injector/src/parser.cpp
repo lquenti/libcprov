@@ -11,30 +11,28 @@
 using namespace simdjson;
 
 std::string get_string(ondemand::object& obj, const char* name) {
-    simdjson_result<std::string_view> result
-        = obj.find_field_unordered(name).get_string();
+    simdjson_result<std::string_view> result =
+        obj.find_field_unordered(name).get_string();
     return std::string(result.value());
 }
 
 uint64_t get_uint64(ondemand::object& obj, const char* name) {
-    simdjson_result<uint64_t> result
-        = obj.find_field_unordered(name).get_uint64();
+    simdjson_result<uint64_t> result =
+        obj.find_field_unordered(name).get_uint64();
     return result.value();
 }
 
 std::string get_array_json(simdjson::ondemand::object& obj,
                            const std::string_view& name) {
-    simdjson::simdjson_result<simdjson::ondemand::value> v_res
-        = obj.find_field_unordered(name);
+    simdjson::simdjson_result<simdjson::ondemand::value> v_res =
+        obj.find_field_unordered(name);
     simdjson::ondemand::value v = v_res.value();
     simdjson::simdjson_result<simdjson::ondemand::json_type> t = v.type();
     simdjson::simdjson_result<std::string_view> raw = v.raw_json();
     return std::string(raw.value());
 }
 
-bool one_of(std::string_view t, std::string_view a) {
-    return t == a;
-}
+bool one_of(std::string_view t, std::string_view a) { return t == a; }
 template <class... Ss>
 bool one_of(std::string_view t, std::string_view a, Ss... s) {
     return (t == a) || one_of(t, s...);
@@ -84,13 +82,13 @@ Event parse_event_object(ondemand::object event_obj) {
             uint64_t pid = get_uint64(event_data, "pid");
             uint64_t ppid = get_uint64(event_data, "ppid");
             std::string process_name = get_string(event_data, "launch_command");
-            std::string env_variables
-                = get_array_json(event_data, "env_variables");
-            new_event.event_payload
-                = ProcessStart{.pid = pid,
-                               .ppid = ppid,
-                               .process_name = process_name,
-                               .env_variables = env_variables};
+            std::string env_variables =
+                get_array_json(event_data, "env_variables");
+            new_event.event_payload =
+                ProcessStart{.pid = pid,
+                             .ppid = ppid,
+                             .process_name = process_name,
+                             .env_variables = env_variables};
             break;
         }
         case O::ProcessEnd:
@@ -102,14 +100,14 @@ Event parse_event_object(ondemand::object event_obj) {
             break;
         }
         case O::Transfer:
-            new_event.event_payload
-                = Transfer{.path_read = get_string(event_data, "path_read"),
-                           .path_write = get_string(event_data, "path_write")};
+            new_event.event_payload =
+                Transfer{.path_read = get_string(event_data, "path_read"),
+                         .path_write = get_string(event_data, "path_write")};
             break;
         case O::Rename:
-            new_event.event_payload = Rename{
-                .original_path = get_string(event_data, "original_path"),
-                .new_path = get_string(event_data, "new_path")};
+            new_event.event_payload =
+                Rename{.original_path = get_string(event_data, "original_path"),
+                       .new_path = get_string(event_data, "new_path")};
             break;
         case O::Exec:
             break;

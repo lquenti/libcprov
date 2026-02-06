@@ -1,7 +1,6 @@
 #include "processor.hpp"
 
 #include <sys/types.h>
-#include <xxhash.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -23,15 +22,15 @@ LinuxProcessMap init_processing(EventsByFile& events_by_file) {
         for (Event& event : events) {
             SysOp op = event.operation;
             if (op == SysOp::ProcessStart) {
-                ProcessStart& process_start
-                    = std::get<ProcessStart>(event.event_payload);
+                ProcessStart& process_start =
+                    std::get<ProcessStart>(event.event_payload);
                 /*if (process_start.process_name.rfind("sh -c ", 0) == 0) {
                     ignore_file = true;
                     break;
                 }*/
                 std::string env_variables = process_start.env_variables;
-                env_variables_hash
-                    = XXH64(env_variables.data(), env_variables.size(), 0);
+                env_variables_hash =
+                    XXH64(env_variables.data(), env_variables.size(), 0);
                 process_name = process_start.process_name;
                 process_id = process_name + std::to_string(env_variables_hash);
                 linux_process = {process_start.ppid, event.ts, 0, process_id};
@@ -77,14 +76,14 @@ ExecuteSetMap resolve_forks(LinuxProcessMap& linux_process_map,
     ExecuteSetMap execute_set_map;
     for (const auto& [pid, linux_processes] : linux_process_map) {
         for (const LinuxProcess& linux_process : linux_processes) {
-            const std::vector<LinuxProcess> potential_parent_processes
-                = linux_process_map[linux_process.ppid];
+            const std::vector<LinuxProcess> potential_parent_processes =
+                linux_process_map[linux_process.ppid];
             for (const LinuxProcess potential_parent_process :
                  potential_parent_processes) {
-                if (potential_parent_process.start_time
-                        < linux_process.start_time
-                    && potential_parent_process.end_time
-                           > linux_process.end_time) {
+                if (potential_parent_process.start_time <
+                        linux_process.start_time &&
+                    potential_parent_process.end_time >
+                        linux_process.end_time) {
                     execute_set_map[potential_parent_process.process_id].insert(
                         linux_process.process_id);
                     break;
@@ -107,13 +106,13 @@ void sort_linux_processes(
 ExecuteSetMap resolve_exec(Event exec_event, LinuxProcessMap& linux_process_map,
                            ExecuteSetMap& execute_set_map) {
     const auto& exec = std::get<ExecCall>(exec_event.event_payload);
-    std::vector<LinuxProcess>& potential_child_processes
-        = linux_process_map[exec.pid.value()];
+    std::vector<LinuxProcess>& potential_child_processes =
+        linux_process_map[exec.pid.value()];
     sort_linux_processes(potential_child_processes);
     for (const LinuxProcess potential_child_process :
          potential_child_processes) {
-        if (potential_child_process.process_id != exec_event.process_id
-            && potential_child_process.start_time > exec_event.ts) {
+        if (potential_child_process.process_id != exec_event.process_id &&
+            potential_child_process.start_time > exec_event.ts) {
             execute_set_map[exec_event.process_id].insert(
                 potential_child_process.process_id);
         }
@@ -128,8 +127,8 @@ ExecuteSetMap resolve_execs(
         while (!enqueued_exec.empty()) {
             Event event = enqueued_exec.top();
             enqueued_exec.pop();
-            execute_set_map
-                = resolve_exec(event, linux_process_map, execute_set_map);
+            execute_set_map =
+                resolve_exec(event, linux_process_map, execute_set_map);
         }
     }
     return execute_set_map;
@@ -151,14 +150,14 @@ void log_process_start(
             .env_variable_hash = process_start.env_variables_hash.value(),
             .operation_map = {}};
         processed_exec_data.env_variables_hash_to_variables
-            [process_start.env_variables_hash.value()]
-            = process_start.env_variables;
+            [process_start.env_variables_hash.value()] =
+            process_start.env_variables;
         std::string::size_type first_space_pos = process_name.find(' ');
         std::string executable = (first_space_pos == std::string::npos)
                                      ? process_name
                                      : process_name.substr(0, first_space_pos);
-        operations_data_backup_format[executable]
-            = BackupOperations{.read = false, .write = false, .execute = true};
+        operations_data_backup_format[executable] =
+            BackupOperations{.read = false, .write = false, .execute = true};
     }
 }
 
@@ -175,11 +174,11 @@ void log_operation(const std::string& path, const std::string& process_id,
     if (it != processed_exec_data.rename_map.end()) {
         resolved_path = it->second;
     }
-    Operations& selected_operations
-        = processed_exec_data.process_map[process_id]
-              .operation_map[resolved_path];
-    BackupOperations& selected_backup_operations
-        = operations_data_backup_format[resolved_path];
+    Operations& selected_operations =
+        processed_exec_data.process_map[process_id]
+            .operation_map[resolved_path];
+    BackupOperations& selected_backup_operations =
+        operations_data_backup_format[resolved_path];
     switch (op_type) {
         case SysOp::Write: {
             selected_operations.write = true;
@@ -202,8 +201,8 @@ void log_rename(const Event& event, ProcessedExecData& processed_exec_data) {
     const Rename& rename = std::get<Rename>(event.event_payload);
     const std::string& original_path = rename.original_path;
     const std::string& new_path = rename.new_path;
-    std::unordered_map<std::string, std::string>& rename_map
-        = processed_exec_data.rename_map;
+    std::unordered_map<std::string, std::string>& rename_map =
+        processed_exec_data.rename_map;
     auto it = rename_map.find(original_path);
     if (it == rename_map.end()) {
         rename_map[new_path] = original_path;
@@ -233,16 +232,16 @@ ProcessedInjectorData process_events(EventsByFile& events_by_file) {
             case SysOp::Write:
             case SysOp::Read:
             case SysOp::Unlink: {
-                const std::string& path
-                    = std::get<std::string>(event.event_payload);
+                const std::string& path =
+                    std::get<std::string>(event.event_payload);
                 std::string process_id = event.process_id;
                 log_operation(path, process_id, processed_exec_data,
                               operations_data_backup_format, op);
                 break;
             }
             case SysOp::Transfer: {
-                const Transfer& transfer
-                    = std::get<Transfer>(event.event_payload);
+                const Transfer& transfer =
+                    std::get<Transfer>(event.event_payload);
                 log_operation(transfer.path_write, event.process_id,
                               processed_exec_data,
                               operations_data_backup_format, SysOp::Write);
@@ -267,8 +266,8 @@ ProcessedInjectorData process_events(EventsByFile& events_by_file) {
                 break;
         }
     }
-    processed_exec_data.execute_set_map
-        = resolve_execs(enqueued_execs, linux_process_map, execute_set_map);
+    processed_exec_data.execute_set_map =
+        resolve_execs(enqueued_execs, linux_process_map, execute_set_map);
     return ProcessedInjectorData{operations_data_backup_format,
                                  processed_exec_data};
 }

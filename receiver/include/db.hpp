@@ -57,6 +57,8 @@ class DB {
                                      bool add_files);
     std::unordered_map<std::string, Operations> read_operation_map(
         sqlite3* db, uint64_t process_id);
+    sqlite3* open_db();
+    void close_db(sqlite3* db);
 
    private:
     std::string db_file_;

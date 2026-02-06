@@ -121,31 +121,35 @@ std::string post_json_and_get_response(const std::string& url,
 }
 
 int main(int argc, char** argv) {
-    const std::string endpoint_url = "http://127.0.0.1:9000/query_api";
+    const std::string endpoint_url = "http://127.0.0.1:9000/db_interface_api";
     CLI::App app{"Database interface"};
     try {
         Parsed parsed = parse_cli(app, argc, argv);
         std::string output_string;
         switch (parsed.request_type) {
             case RequestType::JobsQuery: {
-                output_string = build_jobs_query_json(
-                    std::get<JobsQueryOpts>(parsed.opts));
+                output_string =
+                    build_jobs_query_json(std::get<JobsQueryOpts>(parsed.opts));
+                break;
             }
             case RequestType::ExecsQuery: {
                 output_string = build_execs_query_json(
                     std::get<ExecsQueryOpts>(parsed.opts));
+                break;
             }
             case RequestType::ProcessesQuery: {
                 output_string = build_processes_query_json(
                     std::get<ProcessesQueryOpts>(parsed.opts));
+                break;
             }
             case RequestType::FileQuery: {
                 output_string = build_files_query_json(
                     std::get<FileQueryOpts>(parsed.opts));
+                break;
             }
         }
-        std::string json_response
-            = post_json_and_get_response(endpoint_url, output_string);
+        std::string json_response =
+            post_json_and_get_response(endpoint_url, output_string);
         std::cout << json_response << "\n";
         return 0;
     } catch (const CLI::ParseError& e) {

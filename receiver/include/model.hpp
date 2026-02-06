@@ -25,10 +25,10 @@ struct Write {
 struct Delete {
     std::string deleted_path;
 };
-using ExecuteSetMap
-    = std::unordered_map<std::string, std::unordered_set<std::string>>;
-using ExecuteSetMapDB
-    = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
+using ExecuteSetMap =
+    std::unordered_map<std::string, std::unordered_set<std::string>>;
+using ExecuteSetMapDB =
+    std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
 using RenameMap = std::unordered_map<std::string, std::string>;
 /*
 struct Rename {
@@ -173,7 +173,7 @@ struct ExecDataInterface {
 };
 
 struct JobDataInterface {
-    std::string job_id;
+    uint64_t job_id;
     std::string cluster_name;
     std::string job_name;
     std::string username;

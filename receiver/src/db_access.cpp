@@ -20,8 +20,8 @@ void add_execute_mappings(
     DB& db, uint64_t exec_id, const ExecuteSetMap& execute_set_map,
     std::unordered_map<std::string, uint64_t> process_id_to_process_db_id) {
     for (auto& [parent_process_id, child_process_ids] : execute_set_map) {
-        uint64_t parent_process_db_id
-            = process_id_to_process_db_id[parent_process_id];
+        uint64_t parent_process_db_id =
+            process_id_to_process_db_id[parent_process_id];
         uint64_t child_process_db_id;
         for (std::string child_process_id : child_process_ids) {
             child_process_db_id = process_id_to_process_db_id[child_process_id];
@@ -58,8 +58,7 @@ void add_variable_hash_pairs(DB& db,
 }
 
 void handleExecCase(DB& db, uint64_t job_id, const std::string& cluster_name,
-                    uint64_t timestamp, const ExecData& exec_data) {
-}
+                    uint64_t timestamp, const ExecData& exec_data) {}
 
 void save_db_data(DB& db, const ParsedInjectorData& parsed_injector_data) {
     uint64_t job_id = parsed_injector_data.job_id;
@@ -74,8 +73,8 @@ void save_db_data(DB& db, const ParsedInjectorData& parsed_injector_data) {
             break;
         case InjectorDataType::Start: {
             db.init_job(job_id, cluster_name);
-            StartData start_data
-                = std::get<StartData>(parsed_injector_data.payload.value());
+            StartData start_data =
+                std::get<StartData>(parsed_injector_data.payload.value());
             std::string json_start = start_data.json;
             std::string path_start = start_data.path;
             db.set_current_job(job_id, cluster_name);
@@ -85,17 +84,17 @@ void save_db_data(DB& db, const ParsedInjectorData& parsed_injector_data) {
             break;
         }
         case InjectorDataType::Exec: {
-            ExecData exec_data
-                = std::get<ExecData>(parsed_injector_data.payload.value());
+            ExecData exec_data =
+                std::get<ExecData>(parsed_injector_data.payload.value());
             db.set_current_job(job_id, cluster_name);
-            uint64_t exec_id
-                = db.add_exec(job_id, cluster_name, timestamp, exec_data.path,
-                              exec_data.json, exec_data.command);
+            uint64_t exec_id =
+                db.add_exec(job_id, cluster_name, timestamp, exec_data.path,
+                            exec_data.json, exec_data.command);
             add_variable_hash_pairs(db,
                                     exec_data.env_variables_hash_to_variables);
             std::unordered_map<std::string, uint64_t>
-                process_id_to_process_db_id
-                = add_processes(db, exec_id, exec_data.process_map);
+                process_id_to_process_db_id =
+                    add_processes(db, exec_id, exec_data.process_map);
             add_operations(db, exec_id, exec_data.process_map,
                            process_id_to_process_db_id);
             add_execute_mappings(db, exec_id, exec_data.execute_set_map,
@@ -121,37 +120,39 @@ static inline uint64_t ddmmyyyy_to_ns_u64_utc(const std::string& ddmmyyyy) {
                                     std::chrono::day{(unsigned)day}};
     if (!ymd.ok()) return 0;
     std::chrono::sys_days days_since_epoch{ymd};
-    std::chrono::sys_time<std::chrono::nanoseconds> time_point
-        = days_since_epoch;
+    std::chrono::sys_time<std::chrono::nanoseconds> time_point =
+        days_since_epoch;
     return (uint64_t)time_point.time_since_epoch().count();
 }
 
 DBInterfaceData fetch_db_interface_db_data(
     ParsedDBInterfaceRequestData parsed_db_interface_request_data) {
     DBInterfaceData db_interface_data;
+    RequestType request_type = parsed_db_interface_request_data.request_type;
+    db_interface_data.request_type = request_type;
     DB db = DB();
-    sqlite3* sqlite3_db = nullptr;
-    switch (parsed_db_interface_request_data.request_type) {
+    sqlite3* sqlite3_db = db.open_db();
+    switch (request_type) {
         case (RequestType::JobsQuery): {
-            JobsQueryOpts job_query_opts = std::get<JobsQueryOpts>(
-                parsed_db_interface_request_data.opts);
+            JobsQueryOpts job_query_opts =
+                std::get<JobsQueryOpts>(parsed_db_interface_request_data.opts);
             uint64_t before_atomic_ts = 0;
             if (job_query_opts.before) {
-                before_atomic_ts
-                    = ddmmyyyy_to_ns_u64_utc(job_query_opts.before.value());
+                before_atomic_ts =
+                    ddmmyyyy_to_ns_u64_utc(job_query_opts.before.value());
             }
             uint64_t after_atomic_ts = 0;
             if (job_query_opts.after) {
-                after_atomic_ts
-                    = ddmmyyyy_to_ns_u64_utc(job_query_opts.after.value());
+                after_atomic_ts =
+                    ddmmyyyy_to_ns_u64_utc(job_query_opts.after.value());
             }
             db_interface_data.db_data = db.get_job_interface_data(
                 job_query_opts.user, before_atomic_ts, after_atomic_ts);
             break;
         }
         case (RequestType::ExecsQuery): {
-            ExecsQueryOpts exec_query_opts = std::get<ExecsQueryOpts>(
-                parsed_db_interface_request_data.opts);
+            ExecsQueryOpts exec_query_opts =
+                std::get<ExecsQueryOpts>(parsed_db_interface_request_data.opts);
             db_interface_data.db_data = db.read_execs(
                 sqlite3_db, exec_query_opts.job_id, exec_query_opts.cluster,
                 false, exec_query_opts.list_with_processes,
@@ -159,21 +160,22 @@ DBInterfaceData fetch_db_interface_db_data(
             break;
         }
         case (RequestType::ProcessesQuery): {
-            ProcessesQueryOpts processes_query_opts
-                = std::get<ProcessesQueryOpts>(
+            ProcessesQueryOpts processes_query_opts =
+                std::get<ProcessesQueryOpts>(
                     parsed_db_interface_request_data.opts);
-            db_interface_data.db_data
-                = db.read_processes(sqlite3_db, processes_query_opts.exec_id,
-                                    processes_query_opts.list_with_files);
+            db_interface_data.db_data =
+                db.read_processes(sqlite3_db, processes_query_opts.exec_id,
+                                  processes_query_opts.list_with_files);
             break;
         }
         case (RequestType::FileQuery): {
-            FileQueryOpts file_query_opts = std::get<FileQueryOpts>(
-                parsed_db_interface_request_data.opts);
+            FileQueryOpts file_query_opts =
+                std::get<FileQueryOpts>(parsed_db_interface_request_data.opts);
             db_interface_data.db_data = db.read_operation_map(
                 sqlite3_db, file_query_opts.process_id.value());
             break;
         }
     }
+    db.close_db(sqlite3_db);
     return db_interface_data;
 }

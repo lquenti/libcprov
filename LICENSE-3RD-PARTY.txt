@@ -1,0 +1,28 @@
+### Third‑Party Dependencies
+
+This project includes or depends on the following external libraries:
+
+- **xxHash** (BSD 2‑Clause License)  
+  High‑performance non‑cryptographic hashing library.  
+  Source: https://github.com/Cyan4973/xxHash  
+  Commit: 1d7b2a9d21bf9a740ead540aa93f4bc4caf11ae0
+
+- **CLI11** (BSD‑3‑Clause License)  
+  C++11 command‑line parser library.  
+  Source: https://github.com/CLIUtils/CLI11
+  Commit: 4d640dfd357044a4f21764a6aa696b9256e4df8c
+
+- **cpp‑httplib** (MIT License)  
+  Single‑file C++11 HTTP/HTTPS client/server library.  
+  Source: https://github.com/yhirose/cpp-httplib
+  Commit: 5ead179b8e9c3bd5325e1465bc34d8226e833c47
+
+- **simdjson** (MIT License)  
+  High-performance JSON parser for modern C++.  
+  Source: (https://github.com/simdjson/simdjson)  
+  Commit: 5ead179b8e9c3bd5325e1465bc34d8226e833c47
+
+- **libcurl** (MIT/X derivative License)  
+  Multi-protocol file transfer library (HTTP, FTP, etc.).  
+  Source: (https://github.com/curl/curl)  
+  Commit: c6ac2de5b38d065e2ff364a378c2cf8fc150bf90

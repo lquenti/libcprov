@@ -2,7 +2,6 @@
 #include <simdjson.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <xxhash.h>
 
 #include <CLI/CLI.hpp>
 #include <filesystem>
@@ -15,12 +14,13 @@
 #include "parser.hpp"
 #include "process_coordinator.hpp"
 #include "processor.hpp"
+#include "xxhash.hpp"
 
 ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     EventsByFile events_by_file = parse_all_jsonl_files(path_access);
     std::filesystem::remove_all(path_access);
-    ProcessedInjectorData processed_injector_data
-        = process_events(events_by_file);
+    ProcessedInjectorData processed_injector_data =
+        process_events(events_by_file);
     return processed_injector_data;
 }
 
@@ -94,8 +94,8 @@ int main(int argc, char** argv) {
     std::string path_access = base_path + job_id + cluster_name;
     switch (parsed.mode) {
         case Mode::Start: {
-            std::string header
-                = build_header("start", path_access, job_id, cluster_name);
+            std::string header =
+                build_header("start", path_access, job_id, cluster_name);
             std::filesystem::create_directories(base_path);
             std::filesystem::create_directories(path_access);
             std::filesystem::create_directories(path_access);
@@ -108,8 +108,8 @@ int main(int argc, char** argv) {
             break;
         }
         case Mode::End: {
-            std::string header
-                = build_header("end", path_access, job_id, cluster_name);
+            std::string header =
+                build_header("end", path_access, job_id, cluster_name);
             EndOpts end_opts = std::get<EndOpts>(parsed.opts);
             std::string end_json = build_end_json_output(end_opts.json);
             std::filesystem::remove_all(path_access);
@@ -117,24 +117,24 @@ int main(int argc, char** argv) {
             break;
         }
         case Mode::Exec: {
-            std::string header
-                = build_header("exec", path_access, job_id, cluster_name);
+            std::string header =
+                build_header("exec", path_access, job_id, cluster_name);
             ExecOpts exec_opts = std::get<ExecOpts>(parsed.opts);
             std::string exec_path = exec_opts.path;
-            std::string absolute_path_exec
-                = std::filesystem::canonical(exec_path).string();
+            std::string absolute_path_exec =
+                std::filesystem::canonical(exec_path).string();
             backup_data_pre_exec(absolute_path_exec);
             std::string exec_json_input = exec_opts.json;
             std::string exec_command = exec_opts.command;
             std::string injector_data_path = path_access;
             set_env_variables(absolute_path_exec, injector_data_path);
-            std::string injector_path
-                = "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
-                  "build/libinjector.so";
+            std::string injector_path =
+                "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
+                "build/libinjector.so";
             start_preload_process(injector_path, exec_command,
                                   injector_data_path);
-            ProcessedInjectorData processed_injector_data
-                = extract_injector_data(injector_data_path);
+            ProcessedInjectorData processed_injector_data =
+                extract_injector_data(injector_data_path);
             ingest_prov_data(
                 processed_injector_data.operations_data_backup_format);
             std::string exec_json_output = build_exec_json_output(

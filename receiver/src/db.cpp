@@ -21,89 +21,89 @@ void DB::build_tables() {
     int db_connection = sqlite3_open(db_file_.c_str(), &db);
     sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
     char* err = nullptr;
-    const char* db_tables
-        = "CREATE TABLE IF NOT EXISTS env_variables_hash_pairs ("
-          "  env_variables_hash INTEGER PRIMARY KEY,"
-          "  env_variables_json TEXT NOT NULL"
-          ");"
-          "CREATE TABLE IF NOT EXISTS jobs ("
-          "  job_id INTEGER NOT NULL,"
-          "  cluster_name TEXT NOT NULL,"
-          "  job_name TEXT NOT NULL,"
-          "  username TEXT NOT NULL,"
-          "  start_time INTEGER NOT NULL,"
-          "  end_time INTEGER NOT NULL,"
-          "  path TEXT NOT NULL,"
-          "  json TEXT NOT NULL,"
-          "  PRIMARY KEY (job_id, cluster_name)"
-          ");"
-          "CREATE TABLE IF NOT EXISTS execs ("
-          "  exec_id INTEGER PRIMARY KEY,"
-          "  job_id INTEGER NOT NULL,"
-          "  cluster_name TEXT NOT NULL,"
-          "  start_time INTEGER NOT NULL,"
-          "  path TEXT NOT NULL,"
-          "  json TEXT NOT NULL,"
-          "  command TEXT NOT NULL,"
-          "  FOREIGN KEY (job_id, cluster_name)"
-          "    REFERENCES jobs(job_id, cluster_name)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE"
-          ");"
-          "CREATE TABLE IF NOT EXISTS processes ("
-          "  process_id INTEGER PRIMARY KEY,"
-          "  exec_id INTEGER NOT NULL,"
-          "  launch_command TEXT NOT NULL,"
-          "  env_variables_hash INTEGER NOT NULL,"
-          "  FOREIGN KEY (exec_id)"
-          "    REFERENCES execs(exec_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE,"
-          "  FOREIGN KEY (env_variables_hash)"
-          "    REFERENCES env_variables_hash_pairs(env_variables_hash)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE"
-          ");"
-          "CREATE TABLE IF NOT EXISTS execute_mappings ("
-          "  exec_id INTEGER NOT NULL,"
-          "  parent_process_id INTEGER NOT NULL,"
-          "  child_process_id INTEGER NOT NULL,"
-          "  PRIMARY KEY (exec_id, parent_process_id, child_process_id),"
-          "  FOREIGN KEY (exec_id)"
-          "    REFERENCES execs(exec_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE,"
-          "  FOREIGN KEY (parent_process_id)"
-          "    REFERENCES processes(process_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE,"
-          "  FOREIGN KEY (child_process_id)"
-          "    REFERENCES processes(process_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE"
-          ");"
-          "CREATE TABLE IF NOT EXISTS operations ("
-          "  process_id INTEGER NOT NULL,"
-          "  path TEXT NOT NULL,"
-          "  read INTEGER NOT NULL DEFAULT 0,"
-          "  write INTEGER NOT NULL DEFAULT 0,"
-          "  deleted INTEGER NOT NULL DEFAULT 0,"
-          "  PRIMARY KEY (process_id, path),"
-          "  FOREIGN KEY (process_id)"
-          "    REFERENCES processes(process_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE"
-          ");"
-          "CREATE TABLE IF NOT EXISTS renames ("
-          "  exec_id INTEGER NOT NULL,"
-          "  original_path TEXT NOT NULL,"
-          "  new_path TEXT NOT NULL,"
-          "  PRIMARY KEY (exec_id, original_path, new_path),"
-          "  FOREIGN KEY (exec_id)"
-          "    REFERENCES execs(exec_id)"
-          "    ON DELETE CASCADE"
-          "    ON UPDATE CASCADE"
-          ");";
+    const char* db_tables =
+        "CREATE TABLE IF NOT EXISTS env_variables_hash_pairs ("
+        "  env_variables_hash INTEGER PRIMARY KEY,"
+        "  env_variables_json TEXT NOT NULL"
+        ");"
+        "CREATE TABLE IF NOT EXISTS jobs ("
+        "  job_id INTEGER NOT NULL,"
+        "  cluster_name TEXT NOT NULL,"
+        "  job_name TEXT NOT NULL,"
+        "  username TEXT NOT NULL,"
+        "  start_time INTEGER NOT NULL,"
+        "  end_time INTEGER NOT NULL,"
+        "  path TEXT NOT NULL,"
+        "  json TEXT NOT NULL,"
+        "  PRIMARY KEY (job_id, cluster_name)"
+        ");"
+        "CREATE TABLE IF NOT EXISTS execs ("
+        "  exec_id INTEGER PRIMARY KEY,"
+        "  job_id INTEGER NOT NULL,"
+        "  cluster_name TEXT NOT NULL,"
+        "  start_time INTEGER NOT NULL,"
+        "  path TEXT NOT NULL,"
+        "  json TEXT NOT NULL,"
+        "  command TEXT NOT NULL,"
+        "  FOREIGN KEY (job_id, cluster_name)"
+        "    REFERENCES jobs(job_id, cluster_name)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE"
+        ");"
+        "CREATE TABLE IF NOT EXISTS processes ("
+        "  process_id INTEGER PRIMARY KEY,"
+        "  exec_id INTEGER NOT NULL,"
+        "  launch_command TEXT NOT NULL,"
+        "  env_variables_hash INTEGER NOT NULL,"
+        "  FOREIGN KEY (exec_id)"
+        "    REFERENCES execs(exec_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE,"
+        "  FOREIGN KEY (env_variables_hash)"
+        "    REFERENCES env_variables_hash_pairs(env_variables_hash)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE"
+        ");"
+        "CREATE TABLE IF NOT EXISTS execute_mappings ("
+        "  exec_id INTEGER NOT NULL,"
+        "  parent_process_id INTEGER NOT NULL,"
+        "  child_process_id INTEGER NOT NULL,"
+        "  PRIMARY KEY (exec_id, parent_process_id, child_process_id),"
+        "  FOREIGN KEY (exec_id)"
+        "    REFERENCES execs(exec_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE,"
+        "  FOREIGN KEY (parent_process_id)"
+        "    REFERENCES processes(process_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE,"
+        "  FOREIGN KEY (child_process_id)"
+        "    REFERENCES processes(process_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE"
+        ");"
+        "CREATE TABLE IF NOT EXISTS operations ("
+        "  process_id INTEGER NOT NULL,"
+        "  path TEXT NOT NULL,"
+        "  read INTEGER NOT NULL DEFAULT 0,"
+        "  write INTEGER NOT NULL DEFAULT 0,"
+        "  deleted INTEGER NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (process_id, path),"
+        "  FOREIGN KEY (process_id)"
+        "    REFERENCES processes(process_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE"
+        ");"
+        "CREATE TABLE IF NOT EXISTS renames ("
+        "  exec_id INTEGER NOT NULL,"
+        "  original_path TEXT NOT NULL,"
+        "  new_path TEXT NOT NULL,"
+        "  PRIMARY KEY (exec_id, original_path, new_path),"
+        "  FOREIGN KEY (exec_id)"
+        "    REFERENCES execs(exec_id)"
+        "    ON DELETE CASCADE"
+        "    ON UPDATE CASCADE"
+        ");";
     db_connection = sqlite3_exec(db, db_tables, nullptr, nullptr, &err);
     sqlite3_close(db);
 }
@@ -218,8 +218,8 @@ uint64_t DB::add_exec(uint64_t job_id, const std::string& cluster_name,
     sqlite3_bind_text(current_job_.insert_exec, 6, command.c_str(), -1,
                       SQLITE_TRANSIENT);
     sqlite3_step(current_job_.insert_exec);
-    uint64_t exec_id
-        = static_cast<uint64_t>(sqlite3_last_insert_rowid(current_job_.db));
+    uint64_t exec_id =
+        static_cast<uint64_t>(sqlite3_last_insert_rowid(current_job_.db));
     sqlite3_reset(current_job_.insert_exec);
     return exec_id;
 }
@@ -275,6 +275,14 @@ void DB::add_variable_hash_pair(uint64_t env_variables_hash,
     sqlite3_step(current_job_.insert_variable_hash_pair);
     sqlite3_reset(current_job_.insert_variable_hash_pair);
 }
+
+sqlite3* DB::open_db() {
+    sqlite3* db = nullptr;
+    sqlite3_open(db_file_.c_str(), &db);
+    return db;
+}
+
+void DB::close_db(sqlite3* db) { sqlite3_close(db); }
 
 std::string DB::col_text(sqlite3_stmt* st, int i) {
     const unsigned char* p = sqlite3_column_text(st, i);
@@ -382,9 +390,9 @@ EnvVariableHashPairs DB::read_env_pairs_for_exec(sqlite3* db,
     sqlite3_finalize(st);
     EnvVariableHashPairs out;
     if (hashes.empty()) return out;
-    std::string q
-        = "SELECT env_variables_hash, env_variables_json FROM "
-          "env_variables_hash_pairs WHERE env_variables_hash IN (";
+    std::string q =
+        "SELECT env_variables_hash, env_variables_json FROM "
+        "env_variables_hash_pairs WHERE env_variables_hash IN (";
     bool first = true;
     for (size_t i = 0; i < hashes.size(); ++i) {
         if (!first) q += ",";
@@ -431,8 +439,8 @@ std::vector<ExecData> DB::read_execs(sqlite3* db, uint64_t job_id,
             exec.process_map_db = read_processes(db, exec_id, true);
             exec.execute_set_map_db = read_execute_set_map(db, exec_id);
             exec.rename_map = read_rename_map(db, exec_id);
-            exec.env_variables_hash_to_variables
-                = read_env_pairs_for_exec(db, exec_id);
+            exec.env_variables_hash_to_variables =
+                read_env_pairs_for_exec(db, exec_id);
         } else if (add_processes || add_files) {
             exec.process_map_db = read_processes(db, exec_id, add_files);
         }
@@ -461,8 +469,8 @@ JobData DB::get_job_data(uint64_t job_id, const std::string& cluster_name) {
         out.end_time = col_u64(st, 3);
         out.path = col_text(st, 4);
         out.json = col_text(st, 5);
-        out.exec_data_vector
-            = read_execs(db, job_id, cluster_name, true, false, false);
+        out.exec_data_vector =
+            read_execs(db, job_id, cluster_name, true, false, false);
     }
     sqlite3_finalize(st);
     sqlite3_close(db);
@@ -474,7 +482,7 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
                                                 uint64_t after) {
     JobInterfaceDataRows job_data_interface_rows{};
     sqlite3* db = nullptr;
-    sqlite3_open(db_file_.c_str(), &db);
+    // sqlite3_open(db_file_.c_str(), &db);
     sqlite3_stmt* st = nullptr;
     if (after != 0 && before != 0) {
         sqlite3_prepare_v2(
@@ -527,6 +535,6 @@ JobInterfaceDataRows DB::get_job_interface_data(std::string user,
         job_data_interface_rows.push_back(job_data_interface);
     }
     sqlite3_finalize(st);
-    sqlite3_close(db);
+    // sqlite3_close(db);
     return job_data_interface_rows;
 }

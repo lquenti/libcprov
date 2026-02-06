@@ -52,10 +52,10 @@ std::string build_execute_map_json(const ExecuteSetMapDB& execute_set_map_db) {
         for (uint64_t child_process_id : child_process_id_set) {
             child_process_id_vector.push_back(std::to_string(child_process_id));
         }
-        std::string execute_map_json
-            = (R"({"parent_process_id":)" + std::to_string(parent_process_id)
-               + R"(,"child_process_id_array":)"
-               + build_json_array(child_process_id_vector) + "}");
+        std::string execute_map_json =
+            (R"({"parent_process_id":)" + std::to_string(parent_process_id) +
+             R"(,"child_process_id_array":)" +
+             build_json_array(child_process_id_vector) + "}");
         execute_map_json_strings.push_back(execute_map_json);
     }
     return build_json_array(execute_map_json_strings);
@@ -66,9 +66,9 @@ std::string build_env_variables_map_json(
     std::vector<std::string> env_variables_map_json_strings;
     for (auto& [env_variable_hash, env_variables_string] :
          env_variables_hash_to_variables) {
-        std::string env_variables_map_json_string
-            = R"({"env_variables_hash":)" + std::to_string(env_variable_hash)
-              + R"(,"env_variables_array":)" + env_variables_string + R"(})";
+        std::string env_variables_map_json_string =
+            R"({"env_variables_hash":)" + std::to_string(env_variable_hash) +
+            R"(,"env_variables_array":)" + env_variables_string + R"(})";
         env_variables_map_json_strings.push_back(env_variables_map_json_string);
     }
     return build_json_array(env_variables_map_json_strings);
@@ -96,33 +96,32 @@ std::string build_operations_json(
 std::string build_processes_data_json(ProcessMapDB process_map_db) {
     std::vector<std::string> process_json_vector;
     for (auto& [process_id, process] : process_map_db) {
-        std::string process_json
-            = R"({"process_command":")" + process.process_command
-              + R"(","process_id":)" + std::to_string(process_id)
-              + R"(,"env_variable_hash":)"
-              + std::to_string(process.env_variable_hash) + R"(,"operations":)"
-              + build_operations_json(process.operation_map) + R"(})";
+        std::string process_json =
+            R"({"process_command":")" + process.process_command +
+            R"(","process_id":)" + std::to_string(process_id) +
+            R"(,"env_variable_hash":)" +
+            std::to_string(process.env_variable_hash) + R"(,"operations":)" +
+            build_operations_json(process.operation_map) + R"(})";
         process_json_vector.push_back(process_json);
     }
     return build_json_array(process_json_vector);
 }
 
 std::string build_exec_json(ExecData exec_data) {
-    std::string env_variable_hash_pair_array_string
-        = build_env_variables_map_json(
-            exec_data.env_variables_hash_to_variables);
-    std::string execute_map_json
-        = build_execute_map_json(exec_data.execute_set_map_db);
+    std::string env_variable_hash_pair_array_string =
+        build_env_variables_map_json(exec_data.env_variables_hash_to_variables);
+    std::string execute_map_json =
+        build_execute_map_json(exec_data.execute_set_map_db);
     std::string rename_map_json = build_json_object(exec_data.rename_map, true);
-    std::string json_string
-        = R"({"start_time":)" + std::to_string(exec_data.start_time.value())
-          + R"(,"processes":)"
-          + build_processes_data_json(std::move(exec_data.process_map_db))
-          + R"(,"execute_map":)" + execute_map_json + R"(,"rename_map":)"
-          + rename_map_json + R"(,"env_variable_hash_pair_array":)"
-          + env_variable_hash_pair_array_string + R"(,"json":")"
-          + exec_data.json + R"(","path":")" + exec_data.path
-          + R"(","command":")" + exec_data.command + R"("})";
+    std::string json_string =
+        R"({"start_time":)" + std::to_string(exec_data.start_time.value()) +
+        R"(,"processes":)" +
+        build_processes_data_json(std::move(exec_data.process_map_db)) +
+        R"(,"execute_map":)" + execute_map_json + R"(,"rename_map":)" +
+        rename_map_json + R"(,"env_variable_hash_pair_array":)" +
+        env_variable_hash_pair_array_string + R"(,"json":")" + exec_data.json +
+        R"(","path":")" + exec_data.path + R"(","command":")" +
+        exec_data.command + R"("})";
     return json_string;
 }
 
@@ -138,10 +137,63 @@ std::string convert_job_data_to_json(JobData job_data) {
         exec_strings.push_back(build_exec_json(exec_data));
     }
     std::string execs_json = build_json_array(exec_strings);
-    return R"({"type":"prov_data","payload":{"execs":)" + execs_json
-           + R"(,"job_name":")" + job_data.job_name + R"(","username":")"
-           + job_data.username + R"(","start_time":)"
-           + std::to_string(job_data.start_time) + R"(,"end_time":)"
-           + std::to_string(job_data.end_time) + R"(,"path":")" + job_data.path
-           + R"(","json":")" + job_data.json + R"("}})";
+    return R"({"type":"prov_data","payload":{"execs":)" + execs_json +
+           R"(,"job_name":")" + job_data.job_name + R"(","username":")" +
+           job_data.username + R"(","start_time":)" +
+           std::to_string(job_data.start_time) + R"(,"end_time":)" +
+           std::to_string(job_data.end_time) + R"(,"path":")" + job_data.path +
+           R"(","json":")" + job_data.json + R"("}})";
+}
+
+std::string convert_db_interface_data_to_json(
+    DBInterfaceData db_interface_data) {
+    switch (db_interface_data.request_type) {
+        case RequestType::JobsQuery: {
+            const auto& rows =
+                std::get<JobInterfaceDataRows>(db_interface_data.db_data);
+            std::vector<std::string> jobs_json;
+            jobs_json.reserve(rows.size());
+            for (const auto& row : rows) {
+                std::string job_json =
+                    R"({"job_id":")" + std::to_string(row.job_id) +
+                    R"(","cluster_name":")" + row.cluster_name +
+                    R"(","job_name":")" + row.job_name + R"(","username":")" +
+                    row.username + R"(","start_time":)" +
+                    std::to_string(row.start_time) + R"(,"end_time":)" +
+                    std::to_string(row.end_time) + R"(,"path":")" + row.path +
+                    R"(","json":")" + row.json + R"("})";
+                jobs_json.push_back(std::move(job_json));
+            }
+            return R"({"jobs":)" + build_json_array(jobs_json) + R"(})";
+        }
+        case RequestType::ExecsQuery: {
+            const auto& rows =
+                std::get<ExecDataInterfaceRows>(db_interface_data.db_data);
+            std::vector<std::string> execs_json;
+            execs_json.reserve(rows.size());
+            for (const auto& row : rows) {
+                execs_json.push_back(build_exec_json(row));
+            }
+            return R"({"execs":)" + build_json_array(execs_json) + R"(})";
+        }
+        case RequestType::ProcessesQuery: {
+            auto processes_json = build_processes_data_json(
+                std::get<ProcessMapDB>(db_interface_data.db_data));
+            return R"({"processes":)" + processes_json + R"(})";
+        }
+        case RequestType::FileQuery: {
+            const auto& op_map =
+                std::get<DBOperationsRows>(db_interface_data.db_data);
+            std::unordered_map<std::string, std::string> as_json;
+            as_json.reserve(op_map.size());
+            for (const auto& [path, ops] : op_map) {
+                std::vector<std::string> op_strings;
+                if (ops.read) op_strings.push_back(R"("read")");
+                if (ops.write) op_strings.push_back(R"("write")");
+                if (ops.deleted) op_strings.push_back(R"("deleted")");
+                as_json[path] = build_json_array(op_strings);
+            }
+            return R"({"files":)" + build_json_object(as_json, false) + R"(}})";
+        }
+    }
 }

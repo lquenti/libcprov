@@ -2,8 +2,7 @@
 
 #include <string>
 
-LogServer::LogServer(std::string url, int port) : url_(url), port_(port) {
-}
+LogServer::LogServer(std::string url, int port) : url_(url), port_(port) {}
 
 void LogServer::set_log_handlers(Handler prov_api_handler,
                                  Handler graph_api_handler,
@@ -21,10 +20,8 @@ void LogServer::set_log_handlers(Handler prov_api_handler,
               });
     svr_.Post("/db_interface_api",
               [this](const httplib::Request& req, httplib::Response& res) {
-                  graph_api_handler_(req, res);
+                  db_interface_api_handler_(req, res);
               });
 }
 
-void LogServer::run(int num_threads) {
-    svr_.listen(url_, port_, num_threads);
-}
+void LogServer::run(int num_threads) { svr_.listen(url_, port_, num_threads); }

@@ -1,3 +1,4 @@
+build/
 receiver/build/
 receiver/CMakeFiles/
 receiver/CMakeCache.txt
