@@ -27,6 +27,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(curl)
 
+# disable opt dependencies for curl
+set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_LIBPSL ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_HTTP2 ON CACHE BOOL "" FORCE)
+
 # ------------------ Subdirectories ------------------
 add_subdirectory(receiver)
 add_subdirectory(injector)
