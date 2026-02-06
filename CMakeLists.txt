@@ -11,7 +11,7 @@ include(FetchContent)
 # simdjson (build from source, pinned to specific commit)
 FetchContent_Declare(
     simdjson
-    GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+    URL https://github.com/simdjson/simdjson/archive/refs/heads/master.zip
     GIT_TAG e6c6db64937113029c3d6498f7744a8f1a72d8b8
 )
 FetchContent_MakeAvailable(simdjson)
@@ -22,7 +22,7 @@ set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     curl
-    GIT_REPOSITORY https://github.com/curl/curl.git
+    URL https://github.com/curl/curl/archive/refs/heads/master.zip
     GIT_TAG c6ac2de5b38d065e2ff364a378c2cf8fc150bf90
 )
 FetchContent_MakeAvailable(curl)
