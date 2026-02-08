@@ -1,6 +1,5 @@
 #include <curl/curl.h>
 
-#include <CLI/CLI.hpp>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -8,6 +7,7 @@
 
 #include "build_json.hpp"
 #include "model.hpp"
+#include "cli.h"
 
 Parsed parse_cli(CLI::App& app, int argc, char** argv) {
     JobsQueryOpts jobs_query_opts;

@@ -23,7 +23,7 @@ target_include_directories(prov PRIVATE
   )
 
 target_link_libraries(prov PRIVATE
-    curl
+    CURL::libcurl
     pthread
     dl
     simdjson::simdjson

@@ -4,8 +4,6 @@ project(libcprov_receiver)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(SQLite3 REQUIRED)
-
 add_executable(libcprov_receiver
     src/main.cpp
     src/logserver.cpp
@@ -13,6 +11,7 @@ add_executable(libcprov_receiver
     src/db_access.cpp
     src/parser.cpp
     src/json_string_builders.cpp
+    src/sqlite3.c
 )
 
 target_include_directories(libcprov_receiver PRIVATE 
@@ -21,5 +20,4 @@ target_include_directories(libcprov_receiver PRIVATE
 
 target_link_libraries(libcprov_receiver PRIVATE
     simdjson::simdjson
-    SQLite::SQLite3
 )

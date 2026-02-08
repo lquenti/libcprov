@@ -3,7 +3,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <CLI/CLI.hpp>
 #include <filesystem>
 #include <string>
 
@@ -11,10 +10,11 @@
 #include "get_job_info.hpp"
 #include "json_string_builders.hpp"
 #include "model.hpp"
+#include "cli.h"
 #include "parser.hpp"
 #include "process_coordinator.hpp"
 #include "processor.hpp"
-#include "xxhash.hpp"
+#include "xxhash.h"
 
 ProcessedInjectorData extract_injector_data(const std::string& path_access) {
     EventsByFile events_by_file = parse_all_jsonl_files(path_access);

@@ -1,5 +1,3 @@
-#include <sqlite3.h>
-
 #include <cstdint>
 #include <db.hpp>
 #include <filesystem>
@@ -8,6 +6,7 @@
 #include <unordered_set>
 
 #include "model.hpp"
+#include "sqlite3.h"
 
 DB::DB() {
     std::string base_path = "/dev/shm/libcprov";

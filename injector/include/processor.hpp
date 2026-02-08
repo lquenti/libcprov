@@ -1,6 +1,6 @@
 #include <deque>
 #include <vector>
-#include <xxhash.hpp>
+#include <xxhash.h>
 
 #include "model.hpp"
 
