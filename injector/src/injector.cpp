@@ -200,6 +200,32 @@ static std::string fd_path(const int& fd) {
     }
 }
 
+std::string escape_json(const std::string &s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\b': out += "\\b";  break;
+            case '\f': out += "\\f";  break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    // control characters as \uXXXX
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
+}
+
 static std::string get_env_variables_string() {
     const std::unordered_set<std::string> exclude = {"_", "SHLVL"};
     std::queue<std::pair<std::string, std::string>> env_variables =
@@ -226,9 +252,9 @@ static std::string get_env_variables_string() {
         if (!first) out.push_back(',');
         first = false;
         out += "{\"";
-        out += kv.first;
+        out += escape_json(kv.first);
         out += "\":\"";
-        out += kv.second;
+        out += escape_json(kv.second);
         out += "\"}";
     }
     out.push_back(']');
@@ -317,7 +343,7 @@ static std::string convert_operation_to_json(Operation operation) {
             payload_json =
                 R"({"pid":)" + std::to_string(process_start.pid) +
                 R"(,"ppid":)" + std::to_string(process_start.ppid) +
-                R"(,"launch_command":")" + process_start.process_name +
+                R"(,"launch_command":")" + escape_json(process_start.process_name) +
                 R"(","env_variables":)" + process_start.env_variables + R"(})";
             break;
         }
@@ -325,20 +351,20 @@ static std::string convert_operation_to_json(Operation operation) {
         case OperationType ::Read:
         case OperationType ::Unlink: {
             const std::string& path = std::get<std::string>(payload);
-            payload_json = R"({"path":")" + path + R"("})";
+            payload_json = R"({"path":")" + escape_json(path) + R"("})";
             break;
         }
         case OperationType ::Transfer: {
             const Transfer& transfer = std::get<Transfer>(payload);
-            payload_json = R"({"path_read":")" + transfer.path_read +
-                           R"(","path_write":")" + transfer.path_write +
+            payload_json = R"({"path_read":")" + escape_json(transfer.path_read) +
+                           R"(","path_write":")" + escape_json(transfer.path_write) +
                            R"("})";
             break;
         }
         case OperationType ::Rename: {
             const Rename& rename = std::get<Rename>(payload);
-            payload_json = R"({"original_path":")" + rename.original_path +
-                           R"(","new_path":")" + rename.new_path + R"("})";
+            payload_json = R"({"original_path":")" + escape_json(rename.original_path) +
+                           R"(","new_path":")" + escape_json(rename.new_path) + R"("})";
             break;
         }
         case OperationType ::ProcessEnd:
@@ -372,7 +398,7 @@ static ProvSaveData prepare_save_events() {
             Operation operation = operations.front();
             operations.pop();
             operation_json = convert_operation_to_json(std::move(operation));
-            all_operations_json.push(operation_json);
+            all_operations_json.push(std::move(operation_json));
             total_size += operation_json.size();
         }
     }
