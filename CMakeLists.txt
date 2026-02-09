@@ -34,6 +34,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(curl)
 
 # ------------------ Subdirectories ------------------
+add_subdirectory(config)
 add_subdirectory(receiver)
 add_subdirectory(injector)
 add_subdirectory(visualizer)

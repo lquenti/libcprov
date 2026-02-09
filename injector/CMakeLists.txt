@@ -20,6 +20,7 @@ add_executable(prov
 
 target_include_directories(prov PRIVATE
     ${PROJECT_INCLUDE_DIR}
+    ${CMAKE_SOURCE_DIR}/config
   )
 
 target_link_libraries(prov PRIVATE
@@ -27,6 +28,7 @@ target_link_libraries(prov PRIVATE
     pthread
     dl
     simdjson::simdjson
+    config_parser
 )
 
 # -------- Injector Shared Library --------

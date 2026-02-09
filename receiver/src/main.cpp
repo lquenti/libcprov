@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 
+#include "config_parser.hpp"
 #include "db.hpp"
 #include "db_access.hpp"
 #include "json_string_builders.hpp"
@@ -31,9 +32,8 @@ void loop_request_processing(std::queue<std::string>& request_queue, DB& db,
 }
 
 int main() {
-    std::string url = "127.0.0.1";
-    int port = 9000;
-    LogServer server(url, port);
+    ConfigUtil::Config config = ConfigUtil::ConfigParser::parse_config_file();
+    LogServer server(config.post_request_ip, config.post_request_port);
     DB db;
     db.build_tables();
     std::mutex request_mutex;

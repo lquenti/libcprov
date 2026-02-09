@@ -43,7 +43,6 @@
 struct linux_dirent;
 struct linux_dirent64;
 
-static const char* endpoint_url = "http://127.0.0.1:9000/log";
 #define LOG_STR_MAX 256
 
 extern "C" char** environ;

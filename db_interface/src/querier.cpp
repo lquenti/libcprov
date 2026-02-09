@@ -6,8 +6,9 @@
 #include <variant>
 
 #include "build_json.hpp"
-#include "model.hpp"
 #include "cli.h"
+#include "config_parser.hpp"
+#include "model.hpp"
 
 Parsed parse_cli(CLI::App& app, int argc, char** argv) {
     JobsQueryOpts jobs_query_opts;
@@ -121,7 +122,10 @@ std::string post_json_and_get_response(const std::string& url,
 }
 
 int main(int argc, char** argv) {
-    const std::string endpoint_url = "http://127.0.0.1:9000/db_interface_api";
+    ConfigUtil::Config config = ConfigUtil::ConfigParser::parse_config_file();
+    const std::string endpoint_url = "http://" + config.post_request_ip + ":" +
+                                     std::to_string(config.post_request_port) +
+                                     "/db_interface_api";
     CLI::App app{"Database interface"};
     try {
         Parsed parsed = parse_cli(app, argc, argv);

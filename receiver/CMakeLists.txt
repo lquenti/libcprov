@@ -16,8 +16,10 @@ add_executable(libcprov_receiver
 
 target_include_directories(libcprov_receiver PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/config
 )
 
 target_link_libraries(libcprov_receiver PRIVATE
     simdjson::simdjson
+    config_parser
 )

@@ -6,11 +6,12 @@
 #include <filesystem>
 #include <string>
 
+#include "cli.h"
+#include "config_parser.hpp"
 #include "data_backup.hpp"
 #include "get_job_info.hpp"
 #include "json_string_builders.hpp"
 #include "model.hpp"
-#include "cli.h"
 #include "parser.hpp"
 #include "process_coordinator.hpp"
 #include "processor.hpp"
@@ -86,7 +87,10 @@ Parsed parse_cli(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-    const std::string endpoint_url = "http://127.0.0.1:9000/prov_api";
+    ConfigUtil::Config config = ConfigUtil::ConfigParser::parse_config_file();
+    const std::string endpoint_url = "http://" + config.post_request_ip + ":" +
+                                     std::to_string(config.post_request_port) +
+                                     "/prov_api";
     Parsed parsed = parse_cli(argc, argv);
     std::string job_id = get_job_id();
     std::string cluster_name = get_cluster_name();
@@ -128,9 +132,7 @@ int main(int argc, char** argv) {
             std::string exec_command = exec_opts.command;
             std::string injector_data_path = path_access;
             set_env_variables(absolute_path_exec, injector_data_path);
-            std::string injector_path =
-                "/home/hyperion/Documents/uni/ba_thesis/libcprov3/injector/"
-                "build/libinjector.so";
+            std::string injector_path = config.injector_path;
             start_preload_process(injector_path, exec_command,
                                   injector_data_path);
             ProcessedInjectorData processed_injector_data =

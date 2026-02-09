@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 
+#include "config_parser.hpp"
 #include "model.hpp"
 #include "parser.hpp"
 #include "svg_graph.hpp"
@@ -52,9 +53,11 @@ int main(int argc, char* argv[]) {
                   << "\n";
         return 1;
     }
-    std::string payload = R"({"job_id":)" + job_id + R"(,"cluster_name":")"
-                          + cluster_name + R"("})";
-    std::string url = "http://127.0.0.1:9000/graph_api";
+    std::string payload = R"({"job_id":)" + job_id + R"(,"cluster_name":")" +
+                          cluster_name + R"("})";
+    ConfigUtil::Config config = ConfigUtil::ConfigParser::parse_config_file();
+    std::string url = "http://" + config.post_request_ip + ":" +
+                      std::to_string(config.post_request_port) + "/graph_api";
     std::string body = http_post(url, payload);
     ParsedLibcprovData parsed_libcprov_data = parse_injector_data(body);
     if (parsed_libcprov_data.response_type == ResponseType::ProvData) {

@@ -12,10 +12,12 @@ add_executable(db_interface
 
 target_include_directories(db_interface PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/config
 )
 
 target_link_libraries(db_interface PRIVATE
     CURL::libcurl
     simdjson::simdjson
+    config_parser
 )
 

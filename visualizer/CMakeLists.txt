@@ -12,9 +12,11 @@ add_executable(libcprov_visualizer
 
 target_include_directories(libcprov_visualizer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/config
 )
 
 target_link_libraries(libcprov_visualizer PRIVATE
     CURL::libcurl
     simdjson::simdjson
+    config_parser
 )
