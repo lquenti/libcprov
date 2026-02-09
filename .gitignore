@@ -42,6 +42,7 @@ test_scripts/test_hooks_synthetic_clang
 test_scripts/test_hooks_synthetic_go
 test_scripts/test_multithreading
 config/cmake_install.cmake
+config/config.json
 config/Makefile
 config/CMakeFiles/
 model_graphs/*
