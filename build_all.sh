@@ -4,7 +4,7 @@ set -euo pipefail
 mkdir -p build
 cd build
 
-if [ "${1:-}" = "hpc" ]; then
+if [ -x "$(command -v module)" ]; then
     module load gcc/14.2.0
     export CC="$(which gcc)"
     export CXX="$(which g++)"
